@@ -6,7 +6,7 @@
 
     local Lib = loadstring(readfile("eclipse_lib.lua"))()
     local Win = Lib:CreateWindow({
-        Title = "ECLIPSE", Subtitle = "Visual Utility",
+        Title = "ECLIPSE", Subtitle = "Visual Utilityyyy",
         Version = "1.21.11", Tag = "FABRIC",
         Key = Enum.KeyCode.RightShift,
     })
