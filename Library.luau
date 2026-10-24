@@ -1,16 +1,3 @@
---[[
-    ECLIPSE — GUI library (Luau / Roblox)
-    1:1 recreation of the Eclipse interface.
-    Effects: window open/close scale+fade, hover/press on every control,
-    expandable module cards, animated theme transitions.
-
-    local Lib = loadstring(readfile("eclipse_lib.lua"))()
-    local Win = Lib:CreateWindow({
-        Title = "ECLIPSE", Subtitle = "Visual Utilityyyy",
-        Version = "1.21.11", Tag = "FABRIC",
-        Key = Enum.KeyCode.RightShift,
-    })
-]]
 
 local Players       = game:GetService("Players")
 local TweenService  = game:GetService("TweenService")
