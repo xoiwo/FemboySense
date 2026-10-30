@@ -1,19 +1,22 @@
 --[[
-    FEMBOYSENSE — UI Library v3.1
-    v3 + GUI-функции из Crimson Hub:
-      • Accent2 (второй цвет) + градиенты / вращающиеся рамки / shimmer (Lib.Grad / Lib.Spin / Lib.Shimmer)
-      • +7 тем из Crimson (Crimson, Ocean, Violet, Emerald, Sunset, Sakura, Gold), тема сохраняется в конфиг
-      • AnimatedShadow (пульсирующее свечение вокруг окон), настройки Shadows / Intensity
-      • Новые уведомления (иконка-глиф, пауза при наведении, клик закрывает, лимит стека, звук)
-      • Watermark v2 (бейдж, иконки FPS/Ping, цвета green/yellow/red, shimmer, прозрачность)
-      • Keybind list v2 (бейдж, счётчик, точки активности, вращающаяся рамка)
-      • Кнопка сброса бинда к дефолту (модуль + AddKeybind)
-      • mod:AddSelection (список с поиском, multi, кнопки)
-      • Ripple при клике, Border thickness / pulse / spin, Particles amount, Free mouse (Modal)
-      • Фон-картинка (opacity, dim, tint, parallax, Ken Burns, slideshow, edge fade, пресеты)
-      • Custom Cursor (9 стилей, glow, trail, spin, pulse, click ripple, пресеты)
-      • cat:AddHero / cat:AddTiles (карточка приветствия + плитки FPS/Ping/Players/Time)
-      • Accent hex / Random accent / Reset Accent2 / Streamer targets
+    FEMBOYSENSE — UI Library v4.0  (UIShadow edition)
+
+    Что нового относительно v3.1:
+      • Нативный UIShadow вместо ImageLabel-хака (rbxassetid://6014261993).
+        Тень лежит ПРЯМО в целевом элементе: сама повторяет размер, UICorner,
+        масштаб (UIScale) и поворот — никаких пересчётов позиций.
+      • Win:AnimatedShadow  — «дышащая» неоновая тень (Blur / Spread / Transparency / Color).
+      • Win:Shadow          — статичная тень с hover-реакцией (карточки, сайдбар, тулбар, тултип, confirm).
+      • Тени у уведомлений (цвет по типу), HUD, watermark, кнопки открытия.
+      • Кольцевая рамка стала «кометой» (две дуги) — спокойнее и дороже на вид.
+      • Градиентные слайдеры, градиентный логотип, edge-lit обводка карточек.
+      • Оптимизация: один декор-тик 30 Гц, кэш viewport, тема применяется мгновенно
+        к скрытым элементам и плавно только к видимым.
+      • Настройки: Card shadows / Shadow through glass / Overlay opacity.
+      • Вся прежняя функциональность (конфиги, курсор, фон, selection, HUD, watermark...) сохранена.
+
+    Примечание: UIShadow должен быть доступен в вашем клиенте. Если Instance.new("UIShadow")
+    не поддерживается, библиотека продолжит работать без теней (всё обёрнуто в pcall).
 ]]
 
 local Players          = game:GetService("Players")
@@ -38,9 +41,10 @@ local SINE, QUINT, BACK, LIN = Enum.EasingStyle.Sine, Enum.EasingStyle.Quint, En
 local OUT, IN = Enum.EasingDirection.Out, Enum.EasingDirection.In
 local AUTO_Y, AUTO_NONE, AUTO_X = Enum.AutomaticSize.Y, Enum.AutomaticSize.None, Enum.AutomaticSize.X
 local V2 = Vector2.new
+local sin, clamp = math.sin, math.clamp
 
 local Lib = {
-    Flags = {}, Version = "v3.1", Lang = "EN", Dicts = {}, Speed = 1,
+    Flags = {}, Version = "v4.0", Lang = "EN", Dicts = {}, Speed = 1,
     Semantic = { Green = rgb(70, 225, 125), Yellow = rgb(255, 190, 60), Red = rgb(255, 70, 70) },
     ResetIcon = 140026246189675,
 }
@@ -92,13 +96,13 @@ Lib.Theme = Theme
 
 --// градиенты (kind: ring / lin / shine / tri / pill)
 local function kp(t, c) return ColorSequenceKeypoint.new(t, c) end
-local function seq5(a, b)
-    a, b = a or Theme.Accent, b or Theme.Bg
-    return ColorSequence.new({ kp(0, a), kp(0.25, b), kp(0.5, a), kp(0.75, b), kp(1, a) })
-end
+local function nk(t, v) return NumberSequenceKeypoint.new(t, v) end
+-- «комета»: две яркие дуги на тонкой подложке — спокойнее, чем старая 5-цветная рамка
+local RING_T = NumberSequence.new({ nk(0, 0.88), nk(0.12, 0.05), nk(0.3, 0.88), nk(0.5, 0.88), nk(0.62, 0.05), nk(0.8, 0.88), nk(1, 0.88) })
 local function gradColor(kind)
     local A, A2 = Theme.Accent, Theme.Accent2
-    if kind == "ring" then return seq5()
+    if kind == "ring" then
+        return ColorSequence.new({ kp(0, A2), kp(0.12, A), kp(0.3, A2), kp(0.5, A2), kp(0.62, A), kp(0.8, A2), kp(1, A2) })
     elseif kind == "lin" then return ColorSequence.new(A2, A)
     elseif kind == "shine" then return ColorSequence.new({ kp(0, Theme.Text), kp(0.5, A), kp(1, Theme.Text) })
     elseif kind == "tri" then return ColorSequence.new({ kp(0, A2), kp(0.5, A), kp(1, A2) }) end
@@ -118,13 +122,19 @@ local function tw(obj, t, props, style, dir)
 end
 local function B(key) return { __bind = key } end
 local function bind(obj, prop, key) obj[prop] = Theme[key] table.insert(reg, { obj, prop, key }) end
+-- видимые элементы красим плавно, всё остальное (в стэше / вне GUI) — мгновенно: нет подвисаний при смене темы
 local function applyTheme(def, instant)
     loadTheme(def)
+    local gui = Lib._gui
     for i = #reg, 1, -1 do
         local e = reg[i]
-        if e[1].Parent then
-            if instant then pcall(function() e[1][e[2]] = Theme[e[3]] end)
-            else pcall(function() tw(e[1], 0.35, { [e[2]] = Theme[e[3]] }, SINE) end) end
+        local o = e[1]
+        if o.Parent then
+            if not instant and gui and o:IsDescendantOf(gui) then
+                pcall(function() tw(o, 0.35, { [e[2]] = Theme[e[3]] }, SINE) end)
+            else
+                pcall(function() o[e[2]] = Theme[e[3]] end)
+            end
         else table.remove(reg, i) end
     end
     for i = #grads, 1, -1 do
@@ -213,9 +223,10 @@ local function plainStroke(color, th, tr)
     return new("UIStroke", { Color = color, Thickness = th or 1, Transparency = tr or 0, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 end
 
---// публичные градиент-хелперы (из Crimson)
+--// публичные градиент-хелперы
 function Lib.Grad(parent, kind, rot)
     local g = new("UIGradient", { Color = gradColor(kind), Rotation = rot or 0, Parent = parent })
+    if kind == "ring" then g.Transparency = RING_T end
     table.insert(grads, { g, kind })
     return g
 end
@@ -225,6 +236,30 @@ function Lib.Spin(g, speed, cond)
     return e
 end
 function Lib.Shimmer(g) table.insert(shimmers, g) return g end
+
+--=====================================================================
+--  UISHADOW (нативный)
+--=====================================================================
+-- Создаёт UIShadow внутри parent. Тень сама повторяет размер/UICorner/UIScale родителя.
+-- ZIndex обязан быть отрицательным, иначе тень ляжет поверх содержимого.
+local function makeShadow(parent, o)
+    o = o or {}
+    local ok, sh = pcall(Instance.new, "UIShadow")
+    if not ok or not sh then return nil end
+    pcall(function()
+        sh.Mode = Enum.ApplyShadowMode.Shape
+        sh.Inset = false
+        sh.ShowBehindParent = o.Behind == true
+        sh.ZIndex = -math.max(1, math.abs(o.ZIndex or 1))
+        sh.BlurRadius = UDim.new(0, o.Blur or 20)
+        sh.Spread = UDim2.fromOffset(o.Spread or 0, o.Spread or 0)
+        sh.Offset = UDim2.fromOffset(o.OffX or 0, o.OffY or 0)
+        sh.Color = o.Color or Theme.Accent2
+        sh.Transparency = o.Transparency or 0.8
+    end)
+    pcall(function() sh.Parent = parent end)
+    return sh
+end
 
 --// ИКОНКИ (реальные картинки)
 local function makeIcon(parent, icon, pos, px)
@@ -352,13 +387,15 @@ end
 
 local function makeSlider(parent, o)
     local mn, mx, step = o.Min or 0, o.Max or 100, o.Step or 1
-    local value = math.clamp(o.Default or mn, mn, mx)
+    local value = clamp(o.Default or mn, mn, mx)
     local f = new("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, LayoutOrder = o.Order or 0 })
     label(f, o.Name or "Slider", UDim2.new(), UDim2.new(1, -70, 0, 18), Enum.Font.GothamMedium, 13, B"Text")
     local out = label(f, "", UDim2.new(1, 0, 0, 0), UDim2.fromOffset(70, 18), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right)
     out.AnchorPoint = V2(1, 0)
     local bar = new("Frame", { Parent = f, Position = UDim2.new(0, 0, 0, 29), Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = B"Bg" }, { corner(2) })
-    local fill = new("Frame", { Parent = bar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = B"Accent" }, { corner(2) })
+    -- заливка с градиентом Accent2 → Accent (фон белый, чтобы градиент не тускнел)
+    local fill = new("Frame", { Parent = bar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE }, { corner(2) })
+    Lib.Grad(fill, "lin")
     local knob = new("Frame", { Parent = bar, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0, 0.5),
         Size = UDim2.fromOffset(12, 12), BackgroundColor3 = WHITE, ZIndex = 2 }, { corner(6) })
     local glow = new("Frame", { Parent = knob, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
@@ -375,7 +412,7 @@ local function makeSlider(parent, o)
     end
     local api = {}
     local function setv(v, silent, fast)
-        v = math.clamp(math.floor((v - mn) / step + 0.5) * step + mn, mn, mx)
+        v = clamp(math.floor((v - mn) / step + 0.5) * step + mn, mn, mx)
         if v == value then return end
         value = v
         render(fast)
@@ -385,7 +422,7 @@ local function makeSlider(parent, o)
     local hit = new("TextButton", { Parent = f, Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, ZIndex = 3 })
     local dragging = false
     local function fromX(x)
-        setv(mn + (mx - mn) * math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1), false, true)
+        setv(mn + (mx - mn) * clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1), false, true)
     end
     hit.InputBegan:Connect(function(i)
         if isPress(i) then
@@ -419,14 +456,15 @@ function Lib:CreateWindow(cfg)
     local Icons = cfg.Icons or {}
     if Icons.Reset then Lib.ResetIcon = Icons.Reset end
     local W, H = 880, 580
+    local DECOR_STEP = 1 / 30
     local Win = {
         Categories = {}, Groups = {}, Modules = {}, BindList = {}, Current = nil, Query = "", Glass = cfg.Glass ~= false,
         userScale = 1, Open = true, HudOn = false, ToggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift,
         ThemeDef = THEMES[2], Opacity = 1, Favs = {}, Recent = {}, LockPos = false, Streamer = false,
         FolderName = cfg.Folder or "FemboysenseHub", unloaders = {}, Particles = false,
         NotifTime = 3, NotifsOn = true, Speed = 1,
-        -- новое
-        Shadows = true, ShadowMul = 1, FreeMouse = true, OverMenu = false, HideSystemCursor = false,
+        Shadows = true, CardShadows = true, ShadowBehind = false, ShadowMul = 1,
+        FreeMouse = true, OverMenu = false, HideSystemCursor = false,
         BorderSpin = 60, BorderPulse = false, BorderThick = 2, _glowT = 0.45, ParticleWait = 0.225,
         Ripples = true, NotifSoundOn = false, WMColors = true, CustomAccent2 = nil,
         StreamTargets = {}, Tiles = {},
@@ -445,6 +483,7 @@ function Lib:CreateWindow(cfg)
     local gui = new("ScreenGui", { Name = "FemboysenseHub", ResetOnSpawn = false, IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 9999, AutoLocalize = false, Parent = guiParent() })
     Win.Gui = gui
+    Lib._gui = gui
 
     -- кнопка-Modal (освобождает мышь в играх с залоченным курсором)
     local modalBtn = new("TextButton", { Parent = gui, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Modal = false })
@@ -461,68 +500,102 @@ function Lib:CreateWindow(cfg)
     end
     Win.BlurSize, Win.BlurOn, Win.DimAmt = 14, false, 0.35
 
+    -- root: прозрачный контейнер + UICorner(22) — UIShadow берёт форму отсюда, main при этом может клипать содержимое
     local root = new("Frame", { Parent = gui, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ZIndex = 2 })
+        Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ZIndex = 2 }, { corner(22) })
     local scale = new("UIScale", { Parent = root })
-    local function fit()
+
+    -- viewport кэшируется один раз; fit() не лезет в workspace каждый вызов
+    local vpSize = V2(1280, 720)
+    local function readViewport()
         local cam = workspace.CurrentCamera
-        local vp = cam and cam.ViewportSize or V2(1280, 720)
-        return math.clamp(math.min(vp.X / (W + 40), vp.Y / (H + 40)), 0.4, 1.3) * Win.userScale
+        if cam then vpSize = cam.ViewportSize end
+    end
+    readViewport()
+    local function fit()
+        return clamp(math.min(vpSize.X / (W + 40), vpSize.Y / (H + 40)), 0.4, 1.3) * Win.userScale
     end
     do
         local cam = workspace.CurrentCamera
-        if cam then keep(cam:GetPropertyChangedSignal("ViewportSize"):Connect(function() if Win.Open then scale.Scale = fit() end end)) end
+        if cam then
+            keep(cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+                readViewport()
+                if Win.Open then scale.Scale = fit() end
+            end))
+        end
     end
 
     ------------------------------------------------------------------
-    --  ANIMATED SHADOW (из Crimson)
+    --  SHADOWS (native UIShadow)
     ------------------------------------------------------------------
-    local shadowList = {}
+    local shadowList, statics = {}, {}
+
+    -- Анимированная «дышащая» тень. Двигаем Blur / Spread / Transparency / Color.
+    -- Размер, угол и масштаб подхватываются от родителя автоматически.
     function Win:AnimatedShadow(target, o)
         o = o or {}
         local e = {
             Target = target, Spread = o.Size or 36, Alpha = o.Alpha or 0.07, Speed = o.Speed or 1.6,
-            Phase = math.random() * 6, H = 0, HT = 0, Vis = 0, Scaled = o.Scaled, Drop = o.Drop ~= false,
+            Phase = math.random() * 6, H = 0, HT = 0, Vis = 0, OffY = o.OffY or 6, Anim = true,
         }
-        e.Holder = new("Frame", { Parent = gui, AnchorPoint = V2(0.5, 0.5), BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(10, 10), ZIndex = o.ZIndex or 2, Visible = false })
-        local function layer(color, zi)
-            return new("ImageLabel", { Parent = e.Holder, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = "rbxassetid://6014261993", ImageColor3 = color,
-                ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450), ImageTransparency = 1, ZIndex = zi })
-        end
-        e.DropImg = layer(Color3.new(0, 0, 0), 1)
-        e.Glow = layer(B"Accent", 2)
+        e.Shadow = makeShadow(target, { Blur = e.Spread * 0.55, OffY = e.OffY, ZIndex = o.ZIndex, Transparency = 1, Behind = Win.ShadowBehind })
+        if e.Shadow then e.Shadow.Enabled = false end
         function e:SetHover(on) self.HT = on and 1 or 0 end
         function e:Step(dt, clk)
-            local tg = self.Target
+            local sh, tg = self.Shadow, self.Target
+            if not sh then return end
             self.H += (self.HT - self.H) * math.min(dt * 8, 1)
             self.Vis += ((Win.Shadows and 1 or 0) - self.Vis) * math.min(dt * 6, 1)
-            local show = tg.Parent ~= nil and tg.Visible and tg.AbsoluteSize.X > 4 and self.Vis > 0.02
-            if show and self.Scaled then show = scale.Scale > 0.05 end
-            if self.Holder.Visible ~= show then self.Holder.Visible = show end
+            local show = tg.Parent ~= nil and tg.Visible and self.Vis > 0.02
+            if sh.Enabled ~= show then sh.Enabled = show end
             if not show then return end
-            local s = math.sin(clk * self.Speed + self.Phase)
-            local sc = self.Scaled and scale.Scale or 1
-            local p, sz = tg.AbsolutePosition - gui.AbsolutePosition, tg.AbsoluteSize
-            self.Holder.Position = UDim2.fromOffset(p.X + sz.X / 2, p.Y + sz.Y / 2)
-            self.Holder.Size = UDim2.fromOffset(sz.X, sz.Y)
-            local sp = self.Spread * sc * (1 + 0.08 * s + self.H * 0.25)
-            self.Glow.Size = UDim2.new(1, sp * 2, 1, sp * 2)
-            local a = self.Alpha * 7 * Win.ShadowMul * (0.85 + 0.15 * s) * (1 + self.H * 0.9) * self.Vis
-            self.Glow.ImageTransparency = 1 - math.clamp(a, 0, 0.85)
-            if self.Drop then
-                local dsp = self.Spread * sc * 0.42
-                self.DropImg.Position = UDim2.new(0.5, 0, 0.5, 10 * sc)
-                self.DropImg.Size = UDim2.new(1, dsp * 2, 1, dsp * 2)
-                local da = 0.55 * math.min(Win.ShadowMul, 1.5) * (1 + self.H * 0.25) * self.Vis
-                self.DropImg.ImageTransparency = 1 - math.clamp(da, 0, 0.8)
-            end
+            local s = sin(clk * self.Speed + self.Phase)
+            local h = self.H
+            sh.BlurRadius = UDim.new(0, self.Spread * (0.55 + 0.08 * s + h * 0.25))
+            local sp = self.Spread * (0.05 + 0.02 * s + h * 0.08)
+            sh.Spread = UDim2.fromOffset(sp, sp)
+            sh.Offset = UDim2.fromOffset(0, self.OffY * (1 + h * 0.3))
+            sh.Transparency = 1 - clamp(self.Alpha * 7 * Win.ShadowMul * (0.85 + 0.15 * s) * (1 + h * 0.9) * self.Vis, 0, 0.85)
+            sh.Color = Theme.Accent2:Lerp(Theme.Accent, 0.45 + 0.35 * s * 0.5 + h * 0.2)
         end
         table.insert(shadowList, e)
         return e
     end
-    Win.RootShadow = Win:AnimatedShadow(root, { Size = 70, Alpha = 0.075, Speed = 1.2, ZIndex = 1, Scaled = true })
+
+    -- Статичная тень (карточки, сайдбар, тулбар, тултип...). Обновляется только при смене темы/настроек/hover.
+    function Win:Shadow(target, o)
+        o = o or {}
+        local e = { Target = target, Alpha = o.Alpha or 0.3, Key = o.Key or "Accent2", Kind = o.Kind, Blur = o.Blur or 16, Hov = false }
+        e.Shadow = makeShadow(target, { Blur = e.Blur, OffY = o.OffY or 4, Spread = o.Spread or 0, ZIndex = o.ZIndex, Transparency = 1, Behind = Win.ShadowBehind })
+        function e:TargetT() return 1 - clamp(self.Alpha * Win.ShadowMul * (self.Hov and 1.7 or 1), 0, 0.9) end
+        function e:Apply()
+            local sh = self.Shadow
+            if not sh then return end
+            sh.Enabled = Win.Shadows and (self.Kind ~= "card" or Win.CardShadows)
+            sh.Color = Theme[self.Key]
+            sh.Transparency = self:TargetT()
+        end
+        function e:SetHover(on)
+            self.Hov = on
+            local sh = self.Shadow
+            if not sh then return end
+            tw(sh, 0.3, { Transparency = self:TargetT(), BlurRadius = UDim.new(0, self.Blur * (on and 1.35 or 1)),
+                Color = on and Theme.Accent or Theme[self.Key] }, SINE)
+        end
+        function e:FadeIn()
+            local sh = self.Shadow
+            if not sh or not sh.Enabled then return end
+            sh.Transparency = 1
+            tw(sh, 0.55, { Transparency = self:TargetT() }, SINE)
+        end
+        table.insert(statics, e)
+        e:Apply()
+        return e
+    end
+    local function applyStatics() for _, e in ipairs(statics) do e:Apply() end end
+    onTheme(applyStatics)
+
+    Win.RootShadow = Win:AnimatedShadow(root, { Size = 70, Alpha = 0.075, Speed = 1.2, OffY = 10 })
 
     local function waves()
         for i = 1, 3 do
@@ -544,7 +617,7 @@ function Lib:CreateWindow(cfg)
 
     local main = new("Frame", { Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = B"Bg", ClipsDescendants = true }, { corner(22) })
     glassT(main, 0.06)
-    local mainStroke = new("UIStroke", { Color = WHITE, Transparency = 0.45, Thickness = Win.BorderThick, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = main })
+    local mainStroke = new("UIStroke", { Color = WHITE, Transparency = Win._glowT, Thickness = Win.BorderThick, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = main })
     local ringGrad = Lib.Grad(mainStroke, "ring")
     Win.RingSpin = Lib.Spin(ringGrad, Win.BorderSpin, function() return Win.Open end)
 
@@ -560,8 +633,7 @@ function Lib:CreateWindow(cfg)
         local function mkEdge(rot, anchor, pos, size)
             local f = new("Frame", { Parent = main, AnchorPoint = anchor, Position = pos, Size = size,
                 BackgroundColor3 = Color3.new(0, 0, 0), Visible = false, ZIndex = 0 })
-            new("UIGradient", { Rotation = rot, Parent = f, Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }) })
+            new("UIGradient", { Rotation = rot, Parent = f, Transparency = NumberSequence.new({ nk(0, 0), nk(1, 1) }) })
             table.insert(edgeFades, f)
         end
         mkEdge(90,  V2(0, 0), UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.28))
@@ -582,7 +654,7 @@ function Lib:CreateWindow(cfg)
                 local p = new("Frame", { Parent = particleLayer, Size = UDim2.fromOffset(sz, sz), Position = UDim2.fromScale(x, 1.03),
                     BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.6 }, { corner(10) })
                 local dur = math.random(60, 110) / 10
-                tw(p, dur, { Position = UDim2.fromScale(math.clamp(x + (math.random() - 0.5) * 0.25, 0, 1), -0.05), BackgroundTransparency = 1 }, SINE)
+                tw(p, dur, { Position = UDim2.fromScale(clamp(x + (math.random() - 0.5) * 0.25, 0, 1), -0.05), BackgroundTransparency = 1 }, SINE)
                 task.delay(dur / Lib.Speed + 0.1, function() p:Destroy() partCount -= 1 end)
             end
         end
@@ -645,25 +717,22 @@ function Lib:CreateWindow(cfg)
         end
     end)
     local function bgStep(dt)
-        if not Bg.Enabled then return end
         if currentImage() ~= Bg._applied then Win:ApplyBackground() end
         if Bg.Parallax == 0 and not Bg.KenBurns and not (Bg.Slideshow and #Bg.Images > 1) then return end
-        local cam = workspace.CurrentCamera
-        local vp = cam and cam.ViewportSize or V2(1280, 720)
         local buffer = 1 + Bg.Parallax * 2 + 0.02
         local kbScale, kbX, kbY = 1, 0, 0
         if Bg.KenBurns then
             Bg._ken += dt * Bg.KenSpeed
-            kbScale = 1 + math.sin(Bg._ken) * 0.05
-            kbX = math.sin(Bg._ken * 0.6) * 0.02
+            kbScale = 1 + sin(Bg._ken) * 0.05
+            kbX = sin(Bg._ken * 0.6) * 0.02
             kbY = math.cos(Bg._ken * 0.4) * 0.02
         end
         local total = buffer * kbScale
         local px, py = (1 - total) / 2 + kbX, (1 - total) / 2 + kbY
         if Bg.Parallax > 0 then
             local m = UIS:GetMouseLocation()
-            px -= ((m.X - vp.X / 2) / vp.X) * Bg.Parallax
-            py -= ((m.Y - vp.Y / 2) / vp.Y) * Bg.Parallax
+            px -= ((m.X - vpSize.X / 2) / vpSize.X) * Bg.Parallax
+            py -= ((m.Y - vpSize.Y / 2) / vpSize.Y) * Bg.Parallax
         end
         Win.BgImage.Size = UDim2.fromScale(total, total)
         Win.BgImage.Position = UDim2.fromScale(px, py)
@@ -682,13 +751,15 @@ function Lib:CreateWindow(cfg)
     ------------------------------------------------------------------
     local side = new("Frame", { Parent = main, Position = UDim2.fromOffset(14, 14), Size = UDim2.new(0, 196, 1, -28), BackgroundColor3 = B"Side" }, { corner(18), stk() })
     glassT(side, 0.1)
+    Win:Shadow(side, { Alpha = 0.32, Blur = 16, OffY = 3, Key = "Accent2" })
     local brand = new("Frame", { Parent = side, Size = UDim2.new(1, 0, 0, 74), BackgroundTransparency = 1 })
-    local logoHolder = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = B"Accent" }, { corner(11) })
+    local logoHolder = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = WHITE }, { corner(11) })
     if cfg.Logo then
         new("ImageLabel", { Parent = logoHolder, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
             Image = type(cfg.Logo) == "number" and ("rbxassetid://" .. cfg.Logo) or cfg.Logo, ScaleType = Enum.ScaleType.Fit })
         logoHolder.BackgroundTransparency = 1
     else
+        Lib.Spin(Lib.Grad(logoHolder, "pill", 45), 40, function() return Win.Open end)
         label(logoHolder, string.sub(cfg.Title or "F", 1, 1), nil, nil, Enum.Font.GothamBlack, 20, B"OnAccent", Enum.TextXAlignment.Center)
     end
     local titleL = label(brand, cfg.Title or "FEMBOYSENSE", UDim2.fromOffset(62, 19), UDim2.new(1, -68, 0, 20), Enum.Font.GothamBlack, 15, WHITE)
@@ -699,8 +770,9 @@ function Lib:CreateWindow(cfg)
     local nav = new("ScrollingFrame", { Parent = side, Position = UDim2.fromOffset(10, 78), Size = UDim2.new(1, -20, 1, -78 - 80),
         BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), ClipsDescendants = true })
     local navInd = new("Frame", { Parent = nav, Size = UDim2.new(1, -4, 0, 40), BackgroundColor3 = B"Panel2", Visible = false, ZIndex = 1 }, {
-        corner(12), new("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.65) }) }), stk() })
-    new("Frame", { Parent = navInd, Position = UDim2.fromOffset(0, 11), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = B"Accent" }, { corner(2) })
+        corner(12), new("UIGradient", { Transparency = NumberSequence.new({ nk(0, 0), nk(1, 0.65) }) }), stk() })
+    local navBar = new("Frame", { Parent = navInd, Position = UDim2.fromOffset(0, 11), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = WHITE }, { corner(2) })
+    Lib.Grad(navBar, "lin", 90)
 
     local account = new("TextButton", { Parent = side, AnchorPoint = V2(0, 1), Position = UDim2.new(0, 12, 1, -12),
         Size = UDim2.new(1, -24, 0, 58), BackgroundColor3 = B"Panel" }, { corner(14), stk() })
@@ -719,6 +791,7 @@ function Lib:CreateWindow(cfg)
     local TBW = W - 238
     local toolbar = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 14), Size = UDim2.fromOffset(TBW, 52), BackgroundColor3 = B"Panel" }, { corner(16), stk() })
     glassT(toolbar, 0.1)
+    Win:Shadow(toolbar, { Alpha = 0.3, Blur = 14, OffY = 3, Key = "Accent2" })
     local chip = new("Frame", { Parent = toolbar, Position = UDim2.fromOffset(9, 9), Size = UDim2.fromOffset(120, 34), BackgroundColor3 = B"Bg" }, { corner(11) })
     local fpsL = dyn(label(chip, "60 fps", UDim2.fromOffset(12, 0), UDim2.fromOffset(50, 34), Enum.Font.GothamBold, 12, B"Text"))
     local pingL = dyn(label(chip, "0 ms", UDim2.new(1, -56, 0, 0), UDim2.fromOffset(46, 34), Enum.Font.GothamMedium, 11, B"Sub", Enum.TextXAlignment.Right))
@@ -763,11 +836,16 @@ function Lib:CreateWindow(cfg)
     glassT(content, 0.03)
     local pageTitle = label(content, "", UDim2.fromOffset(22, 14), UDim2.new(1, -220, 0, 32), Enum.Font.GothamBold, 26, B"Text")
     local pageSub = label(content, "", UDim2.fromOffset(22, 48), UDim2.new(1, -220, 0, 16), Enum.Font.Gotham, 12, B"Sub")
+    -- тонкая градиентная «подчёркивающая» полоска под заголовком
+    local titleBar = new("Frame", { Parent = content, Position = UDim2.fromOffset(22, 68), Size = UDim2.fromOffset(38, 2), BackgroundColor3 = WHITE }, { corner(1) })
+    Lib.Grad(titleBar, "lin")
     drag(pageTitle, root, canDrag)
 
-    local scroll = new("ScrollingFrame", { Parent = content, Position = UDim2.fromOffset(14, 80), Size = UDim2.new(1, -28, 1, -92), BackgroundTransparency = 1,
+    -- боковой отступ скролла = запас под тени карточек (иначе UIShadow обрежется клипом ScrollingFrame)
+    local SCROLL_X = 4
+    local scroll = new("ScrollingFrame", { Parent = content, Position = UDim2.fromOffset(SCROLL_X, 80), Size = UDim2.new(1, -SCROLL_X * 2, 1, -92), BackgroundTransparency = 1,
         ScrollBarThickness = 3, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        ScrollingDirection = Enum.ScrollingDirection.Y }, { new("UIListLayout", { Padding = UDim.new(0, 14), SortOrder = Enum.SortOrder.LayoutOrder }), pad(0, 10, 0, 8) })
+        ScrollingDirection = Enum.ScrollingDirection.Y }, { new("UIListLayout", { Padding = UDim.new(0, 14), SortOrder = Enum.SortOrder.LayoutOrder }), pad(0, 14, 12, 18) })
     local topHolder = new("Frame", { Parent = scroll, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 },
         { new("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }) })
     local colsHolder = new("Frame", { Parent = scroll, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 },
@@ -806,6 +884,7 @@ function Lib:CreateWindow(cfg)
     ------------------------------------------------------------------
     local tip = new("TextLabel", { Parent = gui, Size = UDim2.new(0, 0, 0, 24), AutomaticSize = AUTO_X, BackgroundColor3 = B"Panel2",
         Text = "", TextColor3 = B"Text", TextSize = 11, Visible = false, ZIndex = 200 }, { corner(8), stk(), pad(0, 0, 10, 10) })
+    Win:Shadow(tip, { Alpha = 0.45, Blur = 12, OffY = 3, Key = "Accent" })
     local function showTip(text, obj)
         if not text or text == "" then return end
         tip.Text = T(text)
@@ -814,7 +893,7 @@ function Lib:CreateWindow(cfg)
     end
 
     local nholder = new("Frame", { Parent = gui, AnchorPoint = V2(1, 0), Position = UDim2.new(1, -16, 0, 16), Size = UDim2.fromOffset(340, 500), BackgroundTransparency = 1, ZIndex = 100 })
-    local nlist = new("UIListLayout", { Parent = nholder, Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Right })
+    local nlist = new("UIListLayout", { Parent = nholder, Padding = UDim.new(0, 10), HorizontalAlignment = Enum.HorizontalAlignment.Right })
     local nDir = 1
     function Win:SetNotifPos(name)
         local right, bottom = name:find("Right") ~= nil, name:find("Bottom") ~= nil
@@ -846,12 +925,18 @@ function Lib:CreateWindow(cfg)
             if old and old.Close then old.Close() end
         end
 
+        -- wrap (место в списке) > slide (двигается, держит UIShadow) > card (стекло, прозрачность)
         local wrap = new("Frame", { Parent = nholder, Size = UDim2.fromOffset(NW, NH), BackgroundTransparency = 1 })
-        local card = new("CanvasGroup", { Parent = wrap, Position = UDim2.fromOffset((NW + 60) * dir, 0), Size = UDim2.fromScale(1, 1),
-            BackgroundColor3 = B"Panel", GroupTransparency = 1 },
-            { corner(16), new("UIStroke", { Color = col, Thickness = 1.2, Transparency = 0.4, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }) })
+        local slide = new("Frame", { Parent = wrap, Position = UDim2.fromOffset((NW + 60) * dir, 0), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, { corner(16) })
+        local nsh = makeShadow(slide, { Color = col, Blur = 22, OffY = 6, Transparency = 1, Behind = Win.ShadowBehind })
+        if nsh then nsh.Enabled = Win.Shadows end
+        local card = new("CanvasGroup", { Parent = slide, Size = UDim2.fromScale(1, 1),
+            BackgroundColor3 = B"Panel", BackgroundTransparency = 0.06, GroupTransparency = 1 },
+            { corner(16) })
+        local cs = new("UIStroke", { Color = col, Thickness = 1.2, Transparency = 0.25, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = card })
+        new("UIGradient", { Parent = cs, Transparency = NumberSequence.new({ nk(0, 0), nk(0.55, 0.55), nk(1, 0.85) }) })
         new("Frame", { Parent = card, Size = UDim2.new(0, 120, 1, 0), BackgroundColor3 = col, BackgroundTransparency = 0.85 },
-            { new("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }) }) })
+            { new("UIGradient", { Transparency = NumberSequence.new({ nk(0, 0), nk(1, 1) }) }) })
         local iconBg = new("Frame", { Parent = card, Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(36, 36),
             BackgroundColor3 = col, BackgroundTransparency = 0.8 }, { corner(12), plainStroke(col, 1.5, 0.2) })
         dyn(new("TextLabel", { Parent = iconBg, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = glyph,
@@ -861,8 +946,8 @@ function Lib:CreateWindow(cfg)
             { TextWrapped = true, TextTruncate = Enum.TextTruncate.None, TextYAlignment = Enum.TextYAlignment.Top }))
         local trackF = new("Frame", { Parent = card, AnchorPoint = V2(0, 1), Position = UDim2.new(0, 16, 1, -8), Size = UDim2.new(1, -32, 0, 3),
             BackgroundColor3 = WHITE, BackgroundTransparency = 0.92 }, { corner(2) })
-        local fill = new("Frame", { Parent = trackF, Size = UDim2.fromScale(1, 1), BackgroundColor3 = col }, { corner(2),
-            new("UIGradient", { Color = ColorSequence.new({ kp(0, col), kp(1, WHITE) }) }) })
+        local fill = new("Frame", { Parent = trackF, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE }, { corner(2),
+            new("UIGradient", { Color = ColorSequence.new({ kp(0, col), kp(1, col:Lerp(WHITE, 0.55)) }) }) })
 
         local closing, hovered = false, false
         local entry = {}
@@ -870,7 +955,9 @@ function Lib:CreateWindow(cfg)
             if closing then return end
             closing = true
             for i, e in ipairs(notifStack) do if e == entry then table.remove(notifStack, i) break end end
-            tw(card, 0.4, { Position = UDim2.fromOffset((NW + 60) * dir, 0), GroupTransparency = 1 }, QUINT, IN)
+            tw(slide, 0.4, { Position = UDim2.fromOffset((NW + 60) * dir, 0) }, QUINT, IN)
+            tw(card, 0.4, { GroupTransparency = 1 }, QUINT, IN)
+            if nsh then tw(nsh, 0.3, { Transparency = 1 }, SINE) end
             task.delay(0.25, function() if wrap.Parent then tw(wrap, 0.3, { Size = UDim2.fromOffset(NW, 0) }, QUINT) end end)
             task.delay(0.55, function() if wrap.Parent then wrap:Destroy() end end)
         end
@@ -881,14 +968,18 @@ function Lib:CreateWindow(cfg)
         hit.MouseEnter:Connect(function()
             hovered = true
             tw(iconBg, 0.2, { Size = UDim2.fromOffset(38, 38), Position = UDim2.fromOffset(15, 15) }, SINE)
+            if nsh then tw(nsh, 0.25, { Transparency = 0.55, BlurRadius = UDim.new(0, 28) }, SINE) end
         end)
         hit.MouseLeave:Connect(function()
             hovered = false
             tw(iconBg, 0.3, { Size = UDim2.fromOffset(36, 36), Position = UDim2.fromOffset(16, 16) }, SINE)
+            if nsh then tw(nsh, 0.3, { Transparency = 0.72, BlurRadius = UDim.new(0, 22) }, SINE) end
         end)
         hit.MouseButton1Click:Connect(close)
 
-        tw(card, 0.6, { Position = UDim2.fromOffset(0, 0), GroupTransparency = 0 }, QUINT)
+        tw(slide, 0.6, { Position = UDim2.fromOffset(0, 0) }, QUINT)
+        tw(card, 0.6, { GroupTransparency = 0 }, QUINT)
+        if nsh then tw(nsh, 0.7, { Transparency = 0.72 }, SINE) end
 
         if Win.NotifSoundOn then
             pcall(function()
@@ -908,7 +999,7 @@ function Lib:CreateWindow(cfg)
                 local d = task.wait()
                 if not hovered then
                     t += d
-                    fill.Size = UDim2.fromScale(math.clamp(1 - t / dur, 0, 1), 1)
+                    fill.Size = UDim2.fromScale(clamp(1 - t / dur, 0, 1), 1)
                 end
             end
             close()
@@ -920,6 +1011,7 @@ function Lib:CreateWindow(cfg)
     ------------------------------------------------------------------
     local confirm = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 80 })
     local cBox = new("Frame", { Parent = confirm, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(340, 150), BackgroundColor3 = B"Panel", ZIndex = 81 }, { corner(16), stk() })
+    Win:Shadow(cBox, { Alpha = 0.6, Blur = 26, OffY = 8, Key = "Accent", ZIndex = 2 })
     local cScale = new("UIScale", { Parent = cBox, Scale = 0.8 })
     local cTitle = label(cBox, "", UDim2.fromOffset(20, 18), UDim2.new(1, -40, 0, 22), Enum.Font.GothamBold, 16, B"Text") cTitle.ZIndex = 82
     local cText = label(cBox, "", UDim2.fromOffset(20, 46), UDim2.new(1, -40, 0, 40), Enum.Font.Gotham, 12, B"Sub", nil, { TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.None }) cText.ZIndex = 82
@@ -964,7 +1056,7 @@ function Lib:CreateWindow(cfg)
         end
     end)
     drag(openBtn, openBtn)
-    Win:AnimatedShadow(openBtn, { Size = 18, Alpha = 0.1, ZIndex = 69 })
+    Win:AnimatedShadow(openBtn, { Size = 22, Alpha = 0.12, OffY = 4 })
     openBtn.MouseEnter:Connect(function() tw(openScale, 0.3, { Scale = 1.12 }, BACK) end)
     openBtn.MouseLeave:Connect(function() tw(openScale, 0.3, { Scale = 1 }, SINE) end)
 
@@ -976,19 +1068,17 @@ function Lib:CreateWindow(cfg)
         { corner(16), new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 3) }), pad(10, 10, 12, 12) })
     local hudBg = new("UIGradient", { Rotation = 90, Parent = hud })
     onTheme(function() hudBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.7), Theme.Panel) end)
-    do
-        local s = plainStroke(WHITE, 1.5, 0.15)
-        s.Parent = hud
-        Lib.Spin(Lib.Grad(s, "ring"), -110)
-    end
-    local hudShadow = Win:AnimatedShadow(hud, { Size = 26, Alpha = 0.085, ZIndex = 59 })
+    local hudStroke = plainStroke(WHITE, 1.5, 0.15)
+    hudStroke.Parent = hud
+    Lib.Spin(Lib.Grad(hudStroke, "ring"), -110, function() return hud.Visible end)
+    local hudShadow = Win:AnimatedShadow(hud, { Size = 28, Alpha = 0.09, OffY = 4 })
     hud.MouseEnter:Connect(function() hudShadow:SetHover(true) end)
     hud.MouseLeave:Connect(function() hudShadow:SetHover(false) end)
     local hudCount
     do
         local head = new("Frame", { Parent = hud, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
         local badge = new("Frame", { Parent = head, Position = UDim2.fromOffset(0, 2), Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
-        Lib.Spin(Lib.Grad(badge, "pill", 45), 60)
+        Lib.Spin(Lib.Grad(badge, "pill", 45), 60, function() return hud.Visible end)
         new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "K",
             Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = WHITE })
         local title = label(head, "KEYBINDS", UDim2.fromOffset(32, 0), UDim2.new(1, -78, 1, 0), Enum.Font.GothamBlack, 11, WHITE)
@@ -997,7 +1087,7 @@ function Lib:CreateWindow(cfg)
             Size = UDim2.fromOffset(0, 18), AutomaticSize = AUTO_X, BackgroundColor3 = B"Accent2", BackgroundTransparency = 0.45,
             Text = "0", Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = WHITE }, { corner(9), pad(0, 0, 8, 8) }))
         local line = new("Frame", { Parent = hud, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = B"Accent" })
-        new("UIGradient", { Parent = line, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) }) })
+        new("UIGradient", { Parent = line, Transparency = NumberSequence.new({ nk(0, 0.2), nk(1, 1) }) })
     end
     drag(hud, hud)
     local hudRows = {}
@@ -1035,17 +1125,15 @@ function Lib:CreateWindow(cfg)
         { corner(18), new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }), pad(0, 0, 7, 16) })
     local wmBg = new("UIGradient", { Rotation = 0, Parent = wm })
     onTheme(function() wmBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.7), Theme.Panel) end)
-    do
-        local s = plainStroke(WHITE, 1.5, 0.15)
-        s.Parent = wm
-        Lib.Spin(Lib.Grad(s, "ring"), 120)
-    end
-    local wmShadow = Win:AnimatedShadow(wm, { Size = 26, Alpha = 0.085, ZIndex = 59 })
+    local wmStroke = plainStroke(WHITE, 1.5, 0.15)
+    wmStroke.Parent = wm
+    Lib.Spin(Lib.Grad(wmStroke, "ring"), 120, function() return wm.Visible end)
+    local wmShadow = Win:AnimatedShadow(wm, { Size = 28, Alpha = 0.09, OffY = 4 })
     wm.MouseEnter:Connect(function() wmShadow:SetHover(true) end)
     wm.MouseLeave:Connect(function() wmShadow:SetHover(false) end)
     do
         local badge = new("Frame", { Parent = wm, LayoutOrder = 0, Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
-        Lib.Spin(Lib.Grad(badge, "pill", 45), 60)
+        Lib.Spin(Lib.Grad(badge, "pill", 45), 60, function() return wm.Visible end)
         new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = string.sub(cfg.Title or "F", 1, 1),
             Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = WHITE })
         local dot = new("Frame", { Parent = badge, AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(1, -2, 1, -2), Size = UDim2.fromOffset(7, 7),
@@ -1070,7 +1158,6 @@ function Lib:CreateWindow(cfg)
             TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left }))
         return l, f
     end
-    local hasIcons = Icons.FPS ~= nil or Icons.Ping ~= nil
     local wmFps, wmFpsF = wmChip(3, Icons.FPS, Icons.FPS and 28 or 52, "0")
     local wmPing, wmPingF = wmChip(5, Icons.Ping, Icons.Ping and 44 or 52, "0 ms")
     local wmTime, wmTimeF = wmChip(7, nil, 0, "00:00:00")
@@ -1087,7 +1174,12 @@ function Lib:CreateWindow(cfg)
         wm.Position = UDim2.new(right and 1 or 0, right and -18 or 18, bottom and 1 or 0, bottom and -18 or 18)
     end
     function Win:SetWatermarkChip(name, on) if Win.WMFrames[name] then Win.WMFrames[name].Visible = on end end
-    function Win:SetWatermarkOpacity(v) wm.BackgroundTransparency = 1 - v end
+    -- общая прозрачность стеклянных оверлеев (watermark + keybind HUD): фон и рамка двигаются синхронно
+    function Win:SetWatermarkOpacity(v)
+        local bgT, stT = 1 - v, 0.15 + (1 - v) * 0.6
+        wm.BackgroundTransparency, hud.BackgroundTransparency = bgT, bgT
+        wmStroke.Transparency, hudStroke.Transparency = stT, stT
+    end
     function Win:SetStreamer(on)
         Win.Streamer = on and true or false
         for _, e in ipairs(Win.StreamTargets) do e[1].Text = on and e[3] or e[2] end
@@ -1099,9 +1191,10 @@ function Lib:CreateWindow(cfg)
     --  MAIN LOOP
     ------------------------------------------------------------------
     local frames, last, fpsAvg = 0, os.clock(), 60
-    local decorAcc, shadowAcc, clockT = 0, 0, 0
+    local decorAcc, clockT = 0, 0
     keep(RunService.RenderStepped:Connect(function(dt)
-        local wantModal = Win.FreeMouse and Win.Open
+        local open = Win.Open
+        local wantModal = Win.FreeMouse and open
         if modalBtn.Modal ~= wantModal then modalBtn.Modal = wantModal end
 
         frames += 1
@@ -1111,7 +1204,7 @@ function Lib:CreateWindow(cfg)
             local fps = math.floor(fpsAvg + 0.5)
             local ping = 0
             pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
-            fpsL.Text, pingL.Text = fps .. " fps", ping .. " ms"
+            if open then fpsL.Text, pingL.Text = fps .. " fps", ping .. " ms" end
             if wm.Visible then
                 wmFps.Text = Icons.FPS and tostring(fps) or (fps .. " fps")
                 wmPing.Text = ping .. (Icons.Ping and "ms" or " ms")
@@ -1123,7 +1216,7 @@ function Lib:CreateWindow(cfg)
                     wmFps.TextColor3, wmPing.TextColor3 = Theme.Text, Theme.Text
                 end
             end
-            if Win.Open and next(Win.Tiles) then
+            if open and next(Win.Tiles) then
                 local t = Win.Tiles
                 if t.FPS then t.FPS.Text = tostring(fps) end
                 if t.PING then t.PING.Text = ping .. "ms" end
@@ -1135,36 +1228,34 @@ function Lib:CreateWindow(cfg)
             frames, last = 0, now
         end
 
+        -- единый «декор-тик» 30 Гц: вращение рамок, shimmer, пульс, анимированные тени
         decorAcc += dt
-        if decorAcc >= 1 / 30 then
+        if decorAcc >= DECOR_STEP then
             local d = decorAcc
             decorAcc = 0
             clockT += d
-            for i = #spinners, 1, -1 do
-                local s = spinners[i]
-                if s[1].Parent then
-                    if not s[3] or s[3]() then s[1].Rotation = (s[1].Rotation + d * s[2]) % 360 end
-                else table.remove(spinners, i) end
+            if open or wm.Visible or hud.Visible then
+                for i = #spinners, 1, -1 do
+                    local s = spinners[i]
+                    local g = s[1]
+                    if g.Parent then
+                        if not s[3] or s[3]() then g.Rotation = (g.Rotation + d * s[2]) % 360 end
+                    else table.remove(spinners, i) end
+                end
+                for i, g in ipairs(shimmers) do
+                    if g.Parent then g.Offset = V2(sin(clockT * 1.4 + i) * 0.5, 0) end
+                end
+                if Win.BorderPulse and open then
+                    mainStroke.Transparency = clamp(Win._glowT + 0.15 * sin(clockT * 2.4), 0, 1)
+                end
             end
-            for i, g in ipairs(shimmers) do
-                if g.Parent then g.Offset = V2(math.sin(clockT * 1.4 + i) * 0.5, 0) end
-            end
-            if Win.BorderPulse and Win.Open then
-                mainStroke.Transparency = math.clamp(Win._glowT + 0.15 * math.sin(clockT * 2.4), 0, 1)
-            end
-        end
-
-        shadowAcc += dt
-        if shadowAcc >= 1 / 20 then
-            local sdt = shadowAcc
-            shadowAcc = 0
             for i = #shadowList, 1, -1 do
                 local e = shadowList[i]
-                if not e.Holder.Parent then table.remove(shadowList, i) else e:Step(sdt, clockT) end
+                if e.Shadow and not e.Shadow.Parent then table.remove(shadowList, i) else e:Step(d, clockT) end
             end
         end
 
-        if Win.Open then bgStep(dt) end
+        if open and Bg.Enabled then bgStep(dt) end
     end))
 
     ------------------------------------------------------------------
@@ -1239,7 +1330,7 @@ function Lib:CreateWindow(cfg)
         local cat = Win.Current
         if not cat then return end
         layoutTok += 1
-        for _, m in ipairs(Win.Modules) do m.Card.Parent = stash end
+        for _, m in ipairs(Win.Modules) do m.Holder.Parent = stash end
         for _, c in ipairs(Win.Categories) do for _, t in ipairs(c.Tops) do t.Parent = stash end end
         local list = visibleMods()
         local q = Win.Query
@@ -1248,11 +1339,12 @@ function Lib:CreateWindow(cfg)
             for _, t in ipairs(cat.Tops) do t.Parent = topHolder tops += 1 end
         end
         for i, m in ipairs(list) do
-            m.Card.Parent = (i % 2 == 1) and colL or colR
+            m.Holder.Parent = (i % 2 == 1) and colL or colR
             m.Card.GroupTransparency = 1
             m.Scale.Scale = 0.93
+            if m.Shadow then m.Shadow:FadeIn() end
             task.delay(0.03 + (i - 1) * 0.045, function()
-                if m.Card.Parent == colL or m.Card.Parent == colR then
+                if m.Holder.Parent == colL or m.Holder.Parent == colR then
                     tw(m.Card, 0.5, { GroupTransparency = 0 }, SINE)
                     tw(m.Scale, 0.6, { Scale = 1 }, BACK)
                 end
@@ -1271,9 +1363,11 @@ function Lib:CreateWindow(cfg)
         pageTitle.Position = UDim2.fromOffset(8, 14)
         tw(pageTitle, 0.5, { TextTransparency = 0, Position = UDim2.fromOffset(22, 14) }, QUINT)
         tw(pageSub, 0.7, { TextTransparency = 0 }, SINE)
+        titleBar.Size = UDim2.fromOffset(0, 2)
+        tw(titleBar, 0.6, { Size = UDim2.fromOffset(38, 2) }, QUINT)
         scroll.CanvasPosition = Vector2.zero
-        scroll.Position = UDim2.fromOffset(14, 104)
-        tw(scroll, 0.6, { Position = UDim2.fromOffset(14, 80) }, QUINT)
+        scroll.Position = UDim2.fromOffset(SCROLL_X, 104)
+        tw(scroll, 0.6, { Position = UDim2.fromOffset(SCROLL_X, 80) }, QUINT)
     end
     Win.Relayout = layout
 
@@ -1330,12 +1424,13 @@ function Lib:CreateWindow(cfg)
             return cat:AddTop(f)
         end
 
-        -- карточка приветствия (из Crimson Home)
+        -- карточка приветствия
         function cat:AddHero(o)
             o = o or {}
             local f = cat:AddCustom(104)
             local card = new("Frame", { Parent = f, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.05 },
                 { corner(18), new("UIStroke", { Color = B"Accent2", Thickness = 1, Transparency = 0.3 }) })
+            Win:Shadow(card, { Alpha = 0.3, Blur = 14, OffY = 3, Key = "Accent2" })
             local bgG = new("UIGradient", { Parent = card })
             onTheme(function() bgG.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.6), Theme.Panel) end)
             new("ImageLabel", { Parent = card, Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(72, 72), BackgroundColor3 = B"Panel2",
@@ -1371,6 +1466,9 @@ function Lib:CreateWindow(cfg)
             for i, name in ipairs(names) do
                 local tile = new("Frame", { Parent = f, LayoutOrder = i, Size = UDim2.new(1 / n, -(10 * (n - 1)) / n, 1, 0), BackgroundColor3 = B"Panel", BackgroundTransparency = 0.1 },
                     { corner(16), new("UIStroke", { Color = B"Accent2", Thickness = 1, Transparency = 0.4 }) })
+                local ts = Win:Shadow(tile, { Alpha = 0.26, Blur = 12, OffY = 3, Key = "Accent2" })
+                tile.MouseEnter:Connect(function() ts:SetHover(true) end)
+                tile.MouseLeave:Connect(function() ts:SetHover(false) end)
                 label(tile, name, UDim2.fromOffset(14, 12), UDim2.new(1, -44, 0, 12), Enum.Font.GothamBold, 10, B"Sub")
                 if icons[name] then
                     new("ImageLabel", { Parent = tile, AnchorPoint = V2(1, 0), Position = UDim2.new(1, -12, 0, 10), Size = UDim2.fromOffset(18, 18),
@@ -1386,21 +1484,28 @@ function Lib:CreateWindow(cfg)
             local defKey = (o.Keybind ~= true) and o.Keybind or nil
             local mod = { Name = o.Name or "Module", Info = o.Info, Cat = cat, State = o.Default and true or false, Key = defKey, DefaultKey = defKey, Mode = o.Mode or "Toggle",
                 Static = o.Static, _n = 0, Search = ((o.Name or "") .. " " .. (o.Info or "")):lower(), Fav = false, Hud = true }
-            local card = new("CanvasGroup", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundColor3 = B"Panel" },
+            -- holder (прозрачная обёртка + UICorner + UIShadow + UIScale) > card (CanvasGroup: клипует и фейдит содержимое)
+            -- UIShadow нельзя класть в CanvasGroup — он бы обрезался канвасом, поэтому тень живёт на обёртке.
+            local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 }, { corner(16) })
+            mod.Scale = new("UIScale", { Parent = holder })
+            local card = new("CanvasGroup", { Parent = holder, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundColor3 = B"Panel" },
                 { corner(16), pad(14, 14, 16, 16), new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }) })
-            mod.Scale = new("UIScale", { Parent = card })
             local cardStroke = stk()
             cardStroke.Parent = card
+            new("UIGradient", { Parent = cardStroke, Rotation = 90, Transparency = NumberSequence.new(0, 0.7) }) -- обводка «подсвечена» сверху
             glassT(card, 0.12)
-            mod.Card = card
-            card.Parent = stash
+            mod.Card, mod.Holder = card, holder
+            mod.Shadow = Win:Shadow(holder, { Alpha = 0.2, Blur = 14, OffY = 3, Key = "Accent2", Kind = "card" })
+            holder.Parent = stash
             card.MouseEnter:Connect(function()
                 tw(card, 0.3, { BackgroundColor3 = Theme.Panel:Lerp(Theme.Panel2, 0.45) }, SINE)
                 tw(cardStroke, 0.3, { Color = Theme.Accent, Transparency = 0.65 }, SINE)
+                mod.Shadow:SetHover(true)
             end)
             card.MouseLeave:Connect(function()
                 tw(card, 0.35, { BackgroundColor3 = Theme.Panel }, SINE)
                 tw(cardStroke, 0.35, { Color = Theme.Stroke, Transparency = Theme.StrokeT }, SINE)
+                mod.Shadow:SetHover(false)
             end)
 
             local head = new("Frame", { Parent = card, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1 })
@@ -1804,11 +1909,11 @@ function Lib:CreateWindow(cfg)
                 local svHit = new("TextButton", { Parent = row, Position = sv.Position, Size = sv.Size, BackgroundTransparency = 1, ZIndex = 6 })
                 local hueHit = new("TextButton", { Parent = row, Position = UDim2.fromOffset(0, 138), Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, ZIndex = 6 })
                 bindDrag(svHit, function(p)
-                    ss = math.clamp((p.X - sv.AbsolutePosition.X) / math.max(sv.AbsoluteSize.X, 1), 0, 1)
-                    vv = 1 - math.clamp((p.Y - sv.AbsolutePosition.Y) / math.max(sv.AbsoluteSize.Y, 1), 0, 1)
+                    ss = clamp((p.X - sv.AbsolutePosition.X) / math.max(sv.AbsoluteSize.X, 1), 0, 1)
+                    vv = 1 - clamp((p.Y - sv.AbsolutePosition.Y) / math.max(sv.AbsoluteSize.Y, 1), 0, 1)
                     refresh(false)
                 end)
-                bindDrag(hueHit, function(p) hh = math.clamp((p.X - hue.AbsolutePosition.X) / math.max(hue.AbsoluteSize.X, 1), 0, 0.999) refresh(false) end)
+                bindDrag(hueHit, function(p) hh = clamp((p.X - hue.AbsolutePosition.X) / math.max(hue.AbsoluteSize.X, 1), 0, 0.999) refresh(false) end)
                 local open = false
                 sw.MouseButton1Click:Connect(function() sfx() open = not open tw(row, 0.5, { Size = UDim2.new(1, 0, 0, open and OPEN_H or 26) }, QUINT) end)
                 local api = {}
@@ -1821,7 +1926,7 @@ function Lib:CreateWindow(cfg)
                 return api
             end
 
-            -- список с поиском / multi-выбором / кнопками (из Crimson AddSelection)
+            -- список с поиском / multi-выбором / кнопками
             function mod:AddSelection(t)
                 t = t or {}
                 addWord(t.Name or "")
@@ -2071,7 +2176,7 @@ function Lib:CreateWindow(cfg)
     end
     function Win:SetScale(v) Win.userScale = v if Win.Open then tw(scale, 0.35, { Scale = fit() }, QUINT) end end
     function Win:SetGlow(g)
-        Win._glowT = 0.9 - g * 0.6
+        Win._glowT = 0.75 - g * 0.7
         if not Win.BorderPulse then mainStroke.Transparency = Win._glowT end
     end
     function Win:SetBorderThickness(v) Win.BorderThick = v mainStroke.Thickness = v end
@@ -2081,8 +2186,14 @@ function Lib:CreateWindow(cfg)
         if not on then mainStroke.Transparency = Win._glowT end
     end
     function Win:SetParticleAmount(v) Win.ParticleWait = 0.9 / math.max(v, 0.1) end
-    function Win:SetShadows(on) Win.Shadows = on and true or false end
-    function Win:SetShadowIntensity(v) Win.ShadowMul = v end
+    function Win:SetShadows(on) Win.Shadows = on and true or false applyStatics() end
+    function Win:SetCardShadows(on) Win.CardShadows = on and true or false applyStatics() end
+    function Win:SetShadowIntensity(v) Win.ShadowMul = v applyStatics() end
+    function Win:SetShadowBehind(on)
+        Win.ShadowBehind = on and true or false
+        for _, e in ipairs(statics) do if e.Shadow then pcall(function() e.Shadow.ShowBehindParent = Win.ShadowBehind end) end end
+        for _, e in ipairs(shadowList) do if e.Shadow then pcall(function() e.Shadow.ShowBehindParent = Win.ShadowBehind end) end end
+    end
     function Win:SetFreeMouse(on) Win.FreeMouse = on and true or false end
     function Win:SetRipples(on) Win.Ripples = on and true or false end
     function Win:SetBlur(on, size) Win.BlurOn = on Win.BlurSize = size or Win.BlurSize if Win.Open then setBlur(on and Win.BlurSize or 0) end end
@@ -2266,8 +2377,10 @@ function Lib:CreateWindow(cfg)
         task.delay(0.5, function()
             for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
             conns, reg, hooks, grads, spinners, shimmers = {}, {}, {}, {}, {}, {}
+            shadowList, statics = {}, {}
             if sfxSound then sfxSound:Destroy() sfxSound = nil end
             if notifSound then notifSound:Destroy() notifSound = nil end
+            Lib._gui = nil
             gui:Destroy()
         end)
         genv.FemboysenseUnload = nil
@@ -2342,6 +2455,8 @@ function Lib:CreateWindow(cfg)
         th:AddSlider({ Name = "Interface glow", Min = 0, Max = 100, Default = 55, Suffix = "%", Flag = "UIGlow", Callback = function(v) Win:SetGlow(v / 100) end })
         th:AddSlider({ Name = "Window opacity", Min = 30, Max = 100, Default = 100, Suffix = "%", Flag = "UIOpacity", Callback = function(v) Win:SetOpacity(v / 100) end })
         th:AddToggle({ Name = "Animated shadows", Default = true, Flag = "Shadows", Callback = function(v) Win:SetShadows(v) end })
+        th:AddToggle({ Name = "Card shadows", Default = true, Flag = "CardShadows", Callback = function(v) Win:SetCardShadows(v) end })
+        th:AddToggle({ Name = "Shadow through glass", Flag = "ShadowBehind", Callback = function(v) Win:SetShadowBehind(v) end })
         th:AddSlider({ Name = "Shadow intensity", Min = 0.2, Max = 3, Step = 0.05, Default = 1, Suffix = "x", Flag = "ShadowMul", Callback = function(v) Win:SetShadowIntensity(v) end })
         th:AddToggle({ Name = "Floating particles", Flag = "UIParticles", Callback = function(v) Win:SetParticles(v) end })
         th:AddSlider({ Name = "Particle amount", Min = 1, Max = 10, Default = 4, Flag = "ParticleAmount", Callback = function(v) Win:SetParticleAmount(v) end })
@@ -2369,7 +2484,7 @@ function Lib:CreateWindow(cfg)
         local ov = st:AddModule({ Name = "Overlays", Icon = Icons.Visuals, Info = "Watermark, active binds, streamer mode", Static = true })
         ov:AddToggle({ Name = "Watermark", Flag = "Watermark", Callback = function(v) Win:SetWatermark(v) end })
         ov:AddOptions({ Name = "Watermark position", Options = { "Top Left", "Top Right", "Bottom Left", "Bottom Right" }, Default = "Top Left", Flag = "WMPos", Callback = function(v) Win:SetWatermarkPos(v) end })
-        ov:AddSlider({ Name = "Watermark opacity", Min = 30, Max = 100, Default = 92, Suffix = "%", Flag = "WMAlpha", Callback = function(v) Win:SetWatermarkOpacity(v / 100) end })
+        ov:AddSlider({ Name = "Overlay opacity", Min = 30, Max = 100, Default = 92, Suffix = "%", Flag = "WMAlpha", Callback = function(v) Win:SetWatermarkOpacity(v / 100) end })
         ov:AddToggle({ Name = "Colored FPS / ping", Default = true, Flag = "WMColors", Callback = function(v) Win.WMColors = v end })
         ov:AddToggle({ Name = "Show FPS", Default = true, Flag = "WMFps", Callback = function(v) Win:SetWatermarkChip("Fps", v) end })
         ov:AddToggle({ Name = "Show ping", Default = true, Flag = "WMPing", Callback = function(v) Win:SetWatermarkChip("Ping", v) end })
@@ -2546,12 +2661,12 @@ function Lib:CreateWindow(cfg)
             end
             local m = UIS:GetMouseLocation()
             local a = 1 - Cursor.Smooth ^ (dt * 60)
-            cpos = cpos:Lerp(m, math.clamp(a, 0, 1))
+            cpos = cpos:Lerp(m, clamp(a, 0, 1))
             CShape.Position = UDim2.fromOffset(cpos.X, cpos.Y)
             local down = Cursor.Shrink and (UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2))
             pressMul += ((down and 0.78 or 1) - pressMul) * math.min(dt * 18, 1)
             hoverMul += (((Cursor.Hover and menuOpen and Win.OverMenu) and 1.15 or 1) - hoverMul) * math.min(dt * 10, 1)
-            local pulse = Cursor.Pulse and (1 + 0.07 * math.sin(os.clock() * 3.2)) or 1
+            local pulse = Cursor.Pulse and (1 + 0.07 * sin(os.clock() * 3.2)) or 1
             CScale.Scale = Cursor.Size * pressMul * hoverMul * pulse
             if Cursor.Spin then
                 crot = (crot + dt * Cursor.SpinSpeed) % 360
@@ -2676,7 +2791,7 @@ function Lib:CreateWindow(cfg)
         local slideInfo = b3:AddLabel("Slideshow: 0 images", 20)
         Win.RefreshSlideInfo = function()
             slideInfo.Text = string.format("Slideshow: %d images (current: %d/%d)", #Bg.Images,
-                math.clamp(Bg.Index, 1, math.max(#Bg.Images, 1)), math.max(#Bg.Images, 1))
+                clamp(Bg.Index, 1, math.max(#Bg.Images, 1)), math.max(#Bg.Images, 1))
         end
         Win.RefreshSlideInfo()
         b3:AddTextbox({ Name = "Add image", Placeholder = "paste ID, press Enter", Callback = function(t)
