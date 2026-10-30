@@ -1059,107 +1059,229 @@ function Lib:CreateWindow(cfg)
     Win:AnimatedShadow(openBtn, { Size = 22, Alpha = 0.12, OffY = 4 })
     openBtn.MouseEnter:Connect(function() tw(openScale, 0.3, { Scale = 1.12 }, BACK) end)
     openBtn.MouseLeave:Connect(function() tw(openScale, 0.3, { Scale = 1 }, SINE) end)
+--[[
+    ЗАМЕНИ в библиотеке всё от строки
+        --  KEYBIND LIST (HUD) v2
+    до строки (включительно, перед MAIN LOOP) конца функции
+        function Win:SetStreamer(on) ... end
+    на этот блок целиком.
+]]
 
     ------------------------------------------------------------------
-    --  KEYBIND LIST (HUD) v2
+    --  KEYBIND LIST (HUD) v3
     ------------------------------------------------------------------
-    local hud = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 100), Size = UDim2.fromOffset(204, 0), AutomaticSize = AUTO_Y,
+    local HUD_W, HUD_ROW = 226, 28
+    local hud = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 100), Size = UDim2.fromOffset(HUD_W, 0), AutomaticSize = AUTO_Y,
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.06, Visible = false, ZIndex = 60 },
-        { corner(16), new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 3) }), pad(10, 10, 12, 12) })
+        { corner(18), new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 3) }), pad(10, 10, 10, 10) })
+    local hudScale = new("UIScale", { Parent = hud })
     local hudBg = new("UIGradient", { Rotation = 90, Parent = hud })
-    onTheme(function() hudBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.7), Theme.Panel) end)
+    onTheme(function() hudBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.72), Theme.Panel) end)
     local hudStroke = plainStroke(WHITE, 1.5, 0.15)
     hudStroke.Parent = hud
-    Lib.Spin(Lib.Grad(hudStroke, "ring"), -110, function() return hud.Visible end)
-    local hudShadow = Win:AnimatedShadow(hud, { Size = 28, Alpha = 0.09, OffY = 4 })
+    Lib.Spin(Lib.Grad(hudStroke, "ring"), -90, function() return hud.Visible end)
+    local hudShadow = Win:AnimatedShadow(hud, { Size = 30, Alpha = 0.09, OffY = 5 })
     hud.MouseEnter:Connect(function() hudShadow:SetHover(true) end)
     hud.MouseLeave:Connect(function() hudShadow:SetHover(false) end)
-    local hudCount
+    Win.HudCompact = false
+
+    local hudCount, hudHead
     do
-        local head = new("Frame", { Parent = hud, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
-        local badge = new("Frame", { Parent = head, Position = UDim2.fromOffset(0, 2), Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
+        -- шапка (клик = показывать только активные)
+        hudHead = new("TextButton", { Parent = hud, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 })
+        local badge = new("Frame", { Parent = hudHead, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 2, 0.5, 0),
+            Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
         Lib.Spin(Lib.Grad(badge, "pill", 45), 60, function() return hud.Visible end)
-        new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "K",
-            Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = WHITE })
-        local title = label(head, "KEYBINDS", UDim2.fromOffset(32, 0), UDim2.new(1, -78, 1, 0), Enum.Font.GothamBlack, 11, WHITE)
+        if Icons.Keybinds then
+            new("ImageLabel", { Parent = badge, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(14, 14),
+                BackgroundTransparency = 1, Image = type(Icons.Keybinds) == "number" and ("rbxassetid://" .. Icons.Keybinds) or Icons.Keybinds, ImageColor3 = WHITE })
+        else
+            new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "K",
+                Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = WHITE })
+        end
+        local title = dyn(label(hudHead, "KEYBINDS", UDim2.fromOffset(36, 0), UDim2.new(1, -90, 1, 0), Enum.Font.GothamBlack, 11, WHITE))
         Lib.Shimmer(Lib.Grad(title, "shine"))
-        hudCount = dyn(new("TextLabel", { Parent = head, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+        hudCount = dyn(new("TextLabel", { Parent = hudHead, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -2, 0.5, 0),
             Size = UDim2.fromOffset(0, 18), AutomaticSize = AUTO_X, BackgroundColor3 = B"Accent2", BackgroundTransparency = 0.45,
-            Text = "0", Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = WHITE }, { corner(9), pad(0, 0, 8, 8) }))
+            Text = "0/0", Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = WHITE }, { corner(9), pad(0, 0, 8, 8) }))
         local line = new("Frame", { Parent = hud, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = B"Accent" })
-        new("UIGradient", { Parent = line, Transparency = NumberSequence.new({ nk(0, 0.2), nk(1, 1) }) })
+        new("UIGradient", { Parent = line, Transparency = NumberSequence.new({ nk(0, 0.15), nk(0.6, 0.75), nk(1, 1) }) })
+        new("Frame", { Parent = hud, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 2), BackgroundTransparency = 1 })
     end
     drag(hud, hud)
-    local hudRows = {}
-    function Win:RefreshHud()
-        for _, r in ipairs(hudRows) do r:Destroy() end
-        hudRows = {}
-        local n = 0
-        local function add(name, key, on)
-            n += 1
-            local row = new("Frame", { Parent = hud, LayoutOrder = n + 1, Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 })
-            local dot = new("Frame", { Parent = row, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(6, 6),
-                BackgroundColor3 = on and Theme.Accent or Theme.Accent2, BackgroundTransparency = on and 0 or 0.4 }, { corner(3) })
-            if on then
-                new("UIStroke", { Parent = dot, Color = Theme.Accent, Thickness = 3, Transparency = 0.7, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
-            end
-            dyn(label(row, name, UDim2.fromOffset(15, 0), UDim2.new(1, -76, 1, 0), Enum.Font.GothamMedium, 12, on and Theme.Text or Theme.Sub))
-            dyn(new("TextLabel", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(0, 20), AutomaticSize = AUTO_X,
-                BackgroundColor3 = on and Theme.Accent or Theme.Panel2, Text = keyName(key), TextColor3 = on and Theme.OnAccent or Theme.Sub,
-                Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(7), plainStroke(on and Theme.Accent or Theme.Accent2, 1, on and 0.2 or 0.5), pad(0, 0, 8, 8) }))
-            table.insert(hudRows, row)
+
+    local hudRows = {} -- [entry] = row
+
+    local function mkHudRow()
+        local r = {}
+        r.Frame = new("Frame", { Parent = hud, Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false })
+        -- мягкая подсветка активной строки (слева направо)
+        r.Hl = new("Frame", { Parent = r.Frame, Position = UDim2.fromOffset(0, 1), Size = UDim2.new(1, 0, 1, -2),
+            BackgroundColor3 = WHITE, BackgroundTransparency = 1 },
+            { corner(9), new("UIGradient", { Transparency = NumberSequence.new({ nk(0, 0), nk(1, 1) }) }) })
+        r.Bar = new("Frame", { Parent = r.Frame, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 6, 0.5, 0),
+            Size = UDim2.fromOffset(3, 14), BackgroundColor3 = Theme.Accent2 }, { corner(2) })
+        r.Name = dyn(label(r.Frame, "", UDim2.fromOffset(18, 0), UDim2.new(1, -112, 1, 0), Enum.Font.GothamMedium, 12, Theme.Sub))
+        local right = new("Frame", { Parent = r.Frame, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -4, 0.5, 0),
+            Size = UDim2.fromOffset(0, 22), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
+            { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6),
+                VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
+        r.Mode = dyn(new("TextLabel", { Parent = right, LayoutOrder = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1,
+            Text = "HOLD", Font = Enum.Font.GothamBold, TextSize = 8, TextColor3 = Theme.Sub, TextTransparency = 0.25, Visible = false }))
+        r.Cap = dyn(new("TextLabel", { Parent = right, LayoutOrder = 2, Size = UDim2.fromOffset(0, 20), AutomaticSize = AUTO_X,
+            BackgroundColor3 = Theme.Panel2, Text = "", TextColor3 = Theme.Sub, Font = Enum.Font.GothamBold, TextSize = 10 },
+            { corner(6), pad(0, 0, 7, 7), new("UISizeConstraint", { MinSize = V2(24, 20) }) }))
+        r.CapStroke = plainStroke(Theme.Accent2, 1, 0.55)
+        r.CapStroke.Parent = r.Cap
+        r.CapScale = new("UIScale", { Parent = r.Cap })
+        return r
+    end
+
+    local function paintHudRow(r, on, instant)
+        local A, A2 = Theme.Accent, Theme.Accent2
+        local function set(o, p, v)
+            if instant then o[p] = v else tw(o, 0.25, { [p] = v }, SINE) end
         end
-        for _, m in ipairs(Win.Modules) do if m.Key and not m.Static then add(m.Name, m.Key, m.State) end end
-        for _, b in ipairs(Win.BindList) do if b.Hud and b.Key then add(b.Name, b.Key, b.State) end end
-        hudCount.Text = tostring(n)
-        hud.Visible = Win.HudOn and n > 0
+        set(r.Hl, "BackgroundColor3", A)
+        set(r.Hl, "BackgroundTransparency", on and 0.82 or 1)
+        set(r.Bar, "BackgroundColor3", on and A or A2)
+        set(r.Bar, "BackgroundTransparency", on and 0 or 0.55)
+        set(r.Name, "TextColor3", on and Theme.Text or Theme.Sub)
+        set(r.Cap, "BackgroundColor3", on and A or Theme.Panel2)
+        set(r.Cap, "TextColor3", on and Theme.OnAccent or Theme.Sub)
+        set(r.CapStroke, "Color", on and A or A2)
+        set(r.CapStroke, "Transparency", on and 0.2 or 0.55)
+        set(r.Mode, "TextColor3", on and A or Theme.Sub)
+        if on and r.on == false and not instant then
+            r.CapScale.Scale = 1.18
+            tw(r.CapScale, 0.45, { Scale = 1 }, BACK)
+        end
+        r.on = on
+    end
+
+    function Win:RefreshHud()
+        local list = {}
+        -- модули тоже лежат в BindList, поэтому идём только по нему (раньше строки дублировались)
+        for _, b in ipairs(Win.BindList) do
+            if b.Hud and b.Key and not b.Static then list[#list + 1] = b end
+        end
+        local seen, active = {}, 0
+        for i, e in ipairs(list) do
+            seen[e] = true
+            local on = e.State == true
+            if on then active += 1 end
+            local r = hudRows[e]
+            local fresh = (r == nil)
+            if fresh then r = mkHudRow() hudRows[e] = r end
+            r.Frame.LayoutOrder = i + 2
+            r.Name.Text = tostring(e.Name or "?")
+            r.Cap.Text = keyName(e.Key)
+            r.Mode.Visible = (e.Mode == "Hold")
+            paintHudRow(r, on, fresh)
+            local show = (not Win.HudCompact) or on
+            if show ~= r.shown then
+                r.shown = show
+                if show then r.Frame.Visible = true end
+                tw(r.Frame, fresh and 0.45 or 0.3, { Size = UDim2.new(1, 0, 0, show and HUD_ROW or 0) }, QUINT)
+                if not show then
+                    task.delay(0.32, function() if r.Frame.Parent and not r.shown then r.Frame.Visible = false end end)
+                end
+            end
+        end
+        for e, r in pairs(hudRows) do
+            if not seen[e] then hudRows[e] = nil r.Frame:Destroy() end
+        end
+        hudCount.Text = string.format("%d/%d", active, #list)
+        tw(hudCount, 0.25, { BackgroundTransparency = active > 0 and 0.15 or 0.5 }, SINE)
+
+        local want = Win.HudOn and #list > 0
+        if want and not hud.Visible then
+            hudScale.Scale = 0.92
+            hud.Visible = true
+            tw(hudScale, 0.45, { Scale = 1 }, BACK)
+        elseif not want then
+            hud.Visible = false
+        end
     end
     function Win:SetBindsHud(on) Win.HudOn = on and true or false Win:RefreshHud() end
+    function Win:SetBindsHudCompact(on) Win.HudCompact = on and true or false Win:RefreshHud() end
+    hudHead.MouseButton1Click:Connect(function() sfx() Win:SetBindsHudCompact(not Win.HudCompact) end)
     onTheme(function() if Win.RefreshHud then Win:RefreshHud() end end)
 
     ------------------------------------------------------------------
-    --  WATERMARK v2
+    --  WATERMARK v3
     ------------------------------------------------------------------
-    local wm = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(0, 36), AutomaticSize = AUTO_X,
+    local WM_H = 38
+    local wm = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(0, WM_H), AutomaticSize = AUTO_X,
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.08, Visible = false, ZIndex = 60 },
-        { corner(18), new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }), pad(0, 0, 7, 16) })
+        { corner(19), pad(0, 0, 6, 14),
+          new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 0),
+              VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
+    local wmScale = new("UIScale", { Parent = wm })
     local wmBg = new("UIGradient", { Rotation = 0, Parent = wm })
-    onTheme(function() wmBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.7), Theme.Panel) end)
+    onTheme(function() wmBg.Color = ColorSequence.new(Theme.Accent2:Lerp(Theme.Panel, 0.72), Theme.Panel) end)
     local wmStroke = plainStroke(WHITE, 1.5, 0.15)
     wmStroke.Parent = wm
-    Lib.Spin(Lib.Grad(wmStroke, "ring"), 120, function() return wm.Visible end)
-    local wmShadow = Win:AnimatedShadow(wm, { Size = 28, Alpha = 0.09, OffY = 4 })
+    Lib.Spin(Lib.Grad(wmStroke, "ring"), 90, function() return wm.Visible end)
+    local wmShadow = Win:AnimatedShadow(wm, { Size = 30, Alpha = 0.09, OffY = 5 })
     wm.MouseEnter:Connect(function() wmShadow:SetHover(true) end)
     wm.MouseLeave:Connect(function() wmShadow:SetHover(false) end)
+
+    -- бренд: бейдж со статус-точкой, название и тег версии
     do
-        local badge = new("Frame", { Parent = wm, LayoutOrder = 0, Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
+        local brand = new("Frame", { Parent = wm, LayoutOrder = 0, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
+            { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8),
+                VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
+        local badge = new("Frame", { Parent = brand, LayoutOrder = 0, Size = UDim2.fromOffset(26, 26), BackgroundColor3 = WHITE }, { corner(9) })
         Lib.Spin(Lib.Grad(badge, "pill", 45), 60, function() return wm.Visible end)
         new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = string.sub(cfg.Title or "F", 1, 1),
-            Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = WHITE })
-        local dot = new("Frame", { Parent = badge, AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(1, -2, 1, -2), Size = UDim2.fromOffset(7, 7),
+            Font = Enum.Font.GothamBlack, TextSize = 14, TextColor3 = WHITE })
+        local dot = new("Frame", { Parent = badge, AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(1, -2, 1, -2), Size = UDim2.fromOffset(8, 8),
             BackgroundColor3 = SEM.Green, ZIndex = 3 }, { corner(4), plainStroke(Theme.Panel, 1.5) })
         pcall(function()
             TweenService:Create(dot, TweenInfo.new(1.1, SINE, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = 0.65 }):Play()
         end)
-        local title = new("TextLabel", { Parent = wm, LayoutOrder = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1,
-            Text = cfg.Title or "FEMBOYSENSE", Font = Enum.Font.GothamBlack, TextSize = 12, TextColor3 = WHITE })
+        local title = dyn(new("TextLabel", { Parent = brand, LayoutOrder = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1,
+            Text = cfg.Title or "FEMBOYSENSE", Font = Enum.Font.GothamBlack, TextSize = 12, TextColor3 = WHITE }))
         Lib.Shimmer(Lib.Grad(title, "shine"))
+        dyn(new("TextLabel", { Parent = brand, LayoutOrder = 2, Size = UDim2.fromOffset(0, 16), AutomaticSize = AUTO_X,
+            BackgroundColor3 = B"Accent2", BackgroundTransparency = 0.55, Text = cfg.Version or "v1.0", Font = Enum.Font.GothamBold,
+            TextSize = 9, TextColor3 = B"Text" }, { corner(8), pad(0, 0, 7, 7) }))
     end
-    local function wmChip(order, icon, width, text)
+
+    -- чип: разделитель | маркер (иконка или точка) | значение
+    -- tint=true: маркер повторяет цвет значения (зелёный/жёлтый/красный из главного цикла)
+    local function wmChip(order, icon, width, text, tint)
         local f = new("Frame", { Parent = wm, LayoutOrder = order, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
-            { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 7), VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
-        new("Frame", { Parent = f, LayoutOrder = 0, Size = UDim2.fromOffset(4, 4), BackgroundColor3 = B"Accent2" }, { corner(2) })
+            { pad(0, 0, 12, 0),
+              new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8),
+                  VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
+        local div = new("Frame", { Parent = f, LayoutOrder = 0, Size = UDim2.fromOffset(1, 16), BackgroundColor3 = B"Accent" })
+        new("UIGradient", { Parent = div, Rotation = 90, Transparency = NumberSequence.new({ nk(0, 1), nk(0.5, 0.35), nk(1, 1) }) })
+
+        local mark, prop
         if icon then
-            new("ImageLabel", { Parent = f, LayoutOrder = 1, Size = UDim2.fromOffset(15, 15), BackgroundTransparency = 1,
-                Image = type(icon) == "number" and ("rbxassetid://" .. icon) or icon, ImageColor3 = B"Accent" })
+            prop = "ImageColor3"
+            mark = new("ImageLabel", { Parent = f, LayoutOrder = 1, Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1,
+                Image = type(icon) == "number" and ("rbxassetid://" .. icon) or icon, ImageColor3 = tint and Theme.Text or nil })
+        else
+            prop = "BackgroundColor3"
+            mark = new("Frame", { Parent = f, LayoutOrder = 1, Size = UDim2.fromOffset(6, 6) }, { corner(3) })
         end
+        if not tint then bind(mark, prop, "Accent") end
+
         local l = dyn(new("TextLabel", { Parent = f, LayoutOrder = 2, Size = UDim2.fromOffset(width, 16), BackgroundTransparency = 1,
             AutomaticSize = width == 0 and AUTO_X or AUTO_NONE, Text = text, Font = Enum.Font.GothamBold, TextSize = 12,
-            TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left }))
+            TextColor3 = B"Text", TextXAlignment = Enum.TextXAlignment.Left }))
+        if tint then
+            mark[prop] = l.TextColor3
+            l:GetPropertyChangedSignal("TextColor3"):Connect(function() mark[prop] = l.TextColor3 end)
+        end
         return l, f
     end
-    local wmFps, wmFpsF = wmChip(3, Icons.FPS, Icons.FPS and 28 or 52, "0")
-    local wmPing, wmPingF = wmChip(5, Icons.Ping, Icons.Ping and 44 or 52, "0 ms")
+
+    local wmFps,  wmFpsF  = wmChip(3, Icons.FPS,  Icons.FPS  and 28 or 54, "0", true)
+    local wmPing, wmPingF = wmChip(5, Icons.Ping, Icons.Ping and 46 or 58, "0 ms", true)
     local wmTime, wmTimeF = wmChip(7, nil, 0, "00:00:00")
     local wmUser, wmUserF = wmChip(9, nil, 0, LocalPlayer.DisplayName)
     wmUserF.Visible = false
@@ -1167,14 +1289,24 @@ function Lib:CreateWindow(cfg)
     Win.WMChips = { Fps = wmFps, Ping = wmPing, Time = wmTime, User = wmUser }
     Win.WMFrames = { Fps = wmFpsF, Ping = wmPingF, Time = wmTimeF, User = wmUserF }
     drag(wm, wm)
-    function Win:SetWatermark(on) wm.Visible = on and true or false end
+
+    function Win:SetWatermark(on)
+        on = on and true or false
+        if on and not wm.Visible then
+            wmScale.Scale = 0.9
+            wm.Visible = true
+            tw(wmScale, 0.45, { Scale = 1 }, BACK)
+        else
+            wm.Visible = on
+        end
+    end
     function Win:SetWatermarkPos(name)
         local right, bottom = name:find("Right") ~= nil, name:find("Bottom") ~= nil
         wm.AnchorPoint = V2(right and 1 or 0, bottom and 1 or 0)
         wm.Position = UDim2.new(right and 1 or 0, right and -18 or 18, bottom and 1 or 0, bottom and -18 or 18)
     end
     function Win:SetWatermarkChip(name, on) if Win.WMFrames[name] then Win.WMFrames[name].Visible = on end end
-    -- общая прозрачность стеклянных оверлеев (watermark + keybind HUD): фон и рамка двигаются синхронно
+    -- общая прозрачность стеклянных оверлеев (watermark + keybind HUD)
     function Win:SetWatermarkOpacity(v)
         local bgT, stT = 1 - v, 0.15 + (1 - v) * 0.6
         wm.BackgroundTransparency, hud.BackgroundTransparency = bgT, bgT
