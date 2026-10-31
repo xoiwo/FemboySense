@@ -1,24 +1,3 @@
---[[
-    FEMBOYSENSE — UI Library v4.0  (UIShadow edition)
-
-    Что нового относительно v3.1:
-      • Нативный UIShadow вместо ImageLabel-хака (rbxassetid://6014261993).
-        Тень лежит ПРЯМО в целевом элементе: сама повторяет размер, UICorner,
-        масштаб (UIScale) и поворот — никаких пересчётов позиций.
-      • Win:AnimatedShadow  — «дышащая» неоновая тень (Blur / Spread / Transparency / Color).
-      • Win:Shadow          — статичная тень с hover-реакцией (карточки, сайдбар, тулбар, тултип, confirm).
-      • Тени у уведомлений (цвет по типу), HUD, watermark, кнопки открытия.
-      • Кольцевая рамка стала «кометой» (две дуги) — спокойнее и дороже на вид.
-      • Градиентные слайдеры, градиентный логотип, edge-lit обводка карточек.
-      • Оптимизация: один декор-тик 30 Гц, кэш viewport, тема применяется мгновенно
-        к скрытым элементам и плавно только к видимым.
-      • Настройки: Card shadows / Shadow through glass / Overlay opacity.
-      • Вся прежняя функциональность (конфиги, курсор, фон, selection, HUD, watermark...) сохранена.
-
-    Примечание: UIShadow должен быть доступен в вашем клиенте. Если Instance.new("UIShadow")
-    не поддерживается, библиотека продолжит работать без теней (всё обёрнуто в pcall).
-]]
-
 local Players          = game:GetService("Players")
 local TweenService     = game:GetService("TweenService")
 local UIS              = game:GetService("UserInputService")
@@ -37,21 +16,18 @@ local genv = (getgenv and getgenv()) or _G
 if genv.FemboysenseUnload then pcall(genv.FemboysenseUnload) end
 
 local rgb, WHITE = Color3.fromRGB, Color3.new(1, 1, 1)
-local SINE, QUINT, BACK, LIN = Enum.EasingStyle.Sine, Enum.EasingStyle.Quint, Enum.EasingStyle.Back, Enum.EasingStyle.Linear
+local SINE, QUINT, BACK = Enum.EasingStyle.Sine, Enum.EasingStyle.Quint, Enum.EasingStyle.Back
 local OUT, IN = Enum.EasingDirection.Out, Enum.EasingDirection.In
 local AUTO_Y, AUTO_NONE, AUTO_X = Enum.AutomaticSize.Y, Enum.AutomaticSize.None, Enum.AutomaticSize.X
 local V2 = Vector2.new
 local sin, clamp = math.sin, math.clamp
 
 local Lib = {
-    Flags = {}, Version = "v4.0", Lang = "EN", Dicts = {}, Speed = 1,
+    Flags = {}, Version = "v5.0", Lang = "EN", Dicts = {}, Speed = 1,
     Semantic = { Green = rgb(70, 225, 125), Yellow = rgb(255, 190, 60), Red = rgb(255, 70, 70) },
     ResetIcon = 140026246189675,
 }
 
---=====================================================================
---  THEMES
---=====================================================================
 local DARK = { Bg = rgb(8, 8, 10), Side = rgb(17, 17, 20), Panel = rgb(26, 26, 30), Panel2 = rgb(40, 40, 46),
     Text = rgb(244, 244, 247), Sub = rgb(146, 146, 154), Stroke = WHITE, StrokeT = 0.93 }
 local LIGHT = { Bg = rgb(232, 232, 238), Side = rgb(246, 246, 250), Panel = rgb(255, 255, 255), Panel2 = rgb(233, 233, 240),
@@ -65,7 +41,6 @@ local THEMES = {
     { Name = "Lavender", Mode = "Light", Accent = rgb(150, 120, 220) },
     { Name = "Midnight", Mode = "Light", Accent = rgb(100, 140, 215) },
     { Name = "Rose",     Mode = "Light", Accent = rgb(220, 120, 155) },
-    -- из Crimson Hub (свои палитры + Accent2)
     { Name = "Crimson", Mode = "Dark", Accent = rgb(255, 40, 60), Accent2 = rgb(140, 12, 28),
       Colors = { Bg = rgb(10, 8, 10), Side = rgb(15, 9, 12), Panel = rgb(24, 17, 19), Panel2 = rgb(34, 22, 25), Text = rgb(245, 245, 245), Sub = rgb(150, 138, 141) } },
     { Name = "Ocean", Mode = "Dark", Accent = rgb(56, 189, 248), Accent2 = rgb(12, 74, 110),
@@ -94,10 +69,8 @@ end
 loadTheme(THEMES[2])
 Lib.Theme = Theme
 
---// градиенты (kind: ring / lin / shine / tri / pill)
 local function kp(t, c) return ColorSequenceKeypoint.new(t, c) end
 local function nk(t, v) return NumberSequenceKeypoint.new(t, v) end
--- «комета»: две яркие дуги на тонкой подложке — спокойнее, чем старая 5-цветная рамка
 local RING_T = NumberSequence.new({ nk(0, 0.88), nk(0.12, 0.05), nk(0.3, 0.88), nk(0.5, 0.88), nk(0.62, 0.05), nk(0.8, 0.88), nk(1, 0.88) })
 local function gradColor(kind)
     local A, A2 = Theme.Accent, Theme.Accent2
@@ -122,7 +95,6 @@ local function tw(obj, t, props, style, dir)
 end
 local function B(key) return { __bind = key } end
 local function bind(obj, prop, key) obj[prop] = Theme[key] table.insert(reg, { obj, prop, key }) end
--- видимые элементы красим плавно, всё остальное (в стэше / вне GUI) — мгновенно: нет подвисаний при смене темы
 local function applyTheme(def, instant)
     loadTheme(def)
     local gui = Lib._gui
@@ -144,7 +116,6 @@ local function applyTheme(def, instant)
     for _, f in ipairs(hooks) do task.spawn(pcall, f) end
 end
 
---// ЯЗЫК
 local function T(s)
     local d = Lib.Dicts[Lib.Lang]
     return d and d[s] or s
@@ -159,7 +130,7 @@ local function setTxt(obj, key, prop)
     track(obj, prop, key)
     obj[prop] = T(key)
 end
-local function dyn(obj) tracked[obj] = nil return obj end -- динамический текст: не переводим
+local function dyn(obj) tracked[obj] = nil return obj end
 function Lib:SetDict(lang, tbl) Lib.Dicts[lang] = tbl end
 function Lib:SetLang(l)
     Lib.Lang = l
@@ -169,20 +140,18 @@ function Lib:SetLang(l)
 end
 Lib.T = T
 
---=====================================================================
---  HELPERS
---=====================================================================
 local function new(class, props, kids)
     local o = Instance.new(class)
     if o:IsA("GuiObject") then o.BorderSizePixel = 0 end
     local isText = o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox")
+    local isBox = o:IsA("TextBox")
     if isText then o.AutoLocalize = false o.Font = Enum.Font.GothamMedium end
     if o:IsA("TextButton") then o.AutoButtonColor = false o.Text = "" end
     local parent
     for k, v in pairs(props or {}) do
         if k == "Parent" then parent = v
         elseif type(v) == "table" and v.__bind then bind(o, k, v.__bind)
-        elseif isText and (k == "Text" or k == "PlaceholderText") and type(v) == "string" then setTxt(o, v, k)
+        elseif isText and type(v) == "string" and (k == "PlaceholderText" or (k == "Text" and not isBox)) then setTxt(o, v, k)
         else o[k] = v end
     end
     for _, c in ipairs(kids or {}) do c.Parent = o end
@@ -223,7 +192,6 @@ local function plainStroke(color, th, tr)
     return new("UIStroke", { Color = color, Thickness = th or 1, Transparency = tr or 0, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 end
 
---// публичные градиент-хелперы
 function Lib.Grad(parent, kind, rot)
     local g = new("UIGradient", { Color = gradColor(kind), Rotation = rot or 0, Parent = parent })
     if kind == "ring" then g.Transparency = RING_T end
@@ -237,11 +205,6 @@ function Lib.Spin(g, speed, cond)
 end
 function Lib.Shimmer(g) table.insert(shimmers, g) return g end
 
---=====================================================================
---  UISHADOW (нативный)
---=====================================================================
--- Создаёт UIShadow внутри parent. Тень сама повторяет размер/UICorner/UIScale родителя.
--- ZIndex обязан быть отрицательным, иначе тень ляжет поверх содержимого.
 local function makeShadow(parent, o)
     o = o or {}
     local ok, sh = pcall(Instance.new, "UIShadow")
@@ -261,17 +224,23 @@ local function makeShadow(parent, o)
     return sh
 end
 
---// ИКОНКИ (реальные картинки)
 local function makeIcon(parent, icon, pos, px)
     px = px or 18
     if type(icon) == "number" then icon = "rbxassetid://" .. icon end
     local im
     if type(icon) == "string" and icon ~= "" then
-        im = new("ImageLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
-            BackgroundTransparency = 1, Image = icon, ImageColor3 = Theme.Sub, ScaleType = Enum.ScaleType.Fit })
+        local isAsset = icon:find("^rbxasset") or icon:find("^rbxthumb") or icon:find("^http")
+        if isAsset then
+            im = new("ImageLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
+                BackgroundTransparency = 1, Image = icon, ImageColor3 = Theme.Sub, ScaleType = Enum.ScaleType.Fit })
+        else
+            im = dyn(new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
+                BackgroundTransparency = 1, Text = icon, TextColor3 = Theme.Sub,
+                TextSize = px, Font = Enum.Font.BuilderIcons }))
+        end
     else
-        im = new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
-            BackgroundTransparency = 1, Text = "•", TextColor3 = Theme.Sub, TextSize = px, Font = Enum.Font.GothamBold })
+        im = dyn(new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
+            BackgroundTransparency = 1, Text = "•", TextColor3 = Theme.Sub, TextSize = px, Font = Enum.Font.GothamBold }))
     end
     local prop = im:IsA("ImageLabel") and "ImageColor3" or "TextColor3"
     local ic = { Holder = im }
@@ -282,7 +251,6 @@ local function makeIcon(parent, icon, pos, px)
     return ic
 end
 
---// КЛАВИШИ
 local SHORT = { RightShift = "RSHIFT", LeftShift = "LSHIFT", RightControl = "RCTRL", LeftControl = "LCTRL",
     RightAlt = "RALT", LeftAlt = "LALT", Return = "ENTER", Backspace = "BKSP", Escape = "ESC",
     Space = "SPACE", Insert = "INS", Delete = "DEL", PageUp = "PGUP", PageDown = "PGDN", CapsLock = "CAPS" }
@@ -324,7 +292,6 @@ local function drag(handle, target, gate)
 end
 Lib.Drag = drag
 
---// ЗВУК
 local sfxSound
 local function sfx()
     if not Lib.SoundsOn then return end
@@ -337,7 +304,6 @@ local function sfx()
     sfxSound:Play()
 end
 
---// кнопка «сбросить бинд»
 local function resetBtn(parent, pos, onClick)
     local b = new("TextButton", { Parent = parent, AnchorPoint = V2(1, 0.5), Position = pos, Size = UDim2.fromOffset(24, 24),
         BackgroundColor3 = B"Panel2", Visible = false }, { corner(8) })
@@ -348,24 +314,21 @@ local function resetBtn(parent, pos, onClick)
     return b
 end
 
---=====================================================================
---  WIDGETS
---=====================================================================
 local function makeSwitch(parent, init, cb, pos)
     local state = init and true or false
-    local track = new("TextButton", {
+    local trackBtn = new("TextButton", {
         Parent = parent, AnchorPoint = V2(1, 0.5), Position = pos or UDim2.new(1, 0, 0.5, 0),
         Size = UDim2.fromOffset(40, 22), BackgroundColor3 = Theme.Bg,
     }, { corner(11) })
-    local press = new("UIScale", { Parent = track })
-    local knob = new("Frame", { Parent = track, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 3, 0.5, 0),
+    local press = new("UIScale", { Parent = trackBtn })
+    local knob = new("Frame", { Parent = trackBtn, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 3, 0.5, 0),
         Size = UDim2.fromOffset(16, 16), BackgroundColor3 = WHITE }, { corner(8) })
     local sw = {}
     local function paint(instant)
         local col = state and Theme.Accent:Lerp(Theme.Panel2, 0.38) or Theme.Bg
         local p = state and UDim2.new(0, 21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
-        if instant then track.BackgroundColor3, knob.Position = col, p
-        else tw(track, 0.25, { BackgroundColor3 = col }, SINE) tw(knob, 0.45, { Position = p }, BACK) end
+        if instant then trackBtn.BackgroundColor3, knob.Position = col, p
+        else tw(trackBtn, 0.25, { BackgroundColor3 = col }, SINE) tw(knob, 0.45, { Position = p }, BACK) end
     end
     paint(true)
     onTheme(function() paint(false) end)
@@ -377,11 +340,11 @@ local function makeSwitch(parent, init, cb, pos)
         if not silent and cb then cb(v) end
     end
     function sw:Get() return state end
-    track.MouseButton1Down:Connect(function() tw(press, 0.1, { Scale = 0.9 }, SINE) knob.Size = UDim2.fromOffset(20, 16) end)
-    track.MouseButton1Up:Connect(function() tw(press, 0.35, { Scale = 1 }, BACK) knob.Size = UDim2.fromOffset(16, 16) end)
-    track.MouseLeave:Connect(function() tw(press, 0.2, { Scale = 1 }, SINE) knob.Size = UDim2.fromOffset(16, 16) end)
-    track.MouseButton1Click:Connect(function() sfx() sw:Set(not state) end)
-    sw.Frame = track
+    trackBtn.MouseButton1Down:Connect(function() tw(press, 0.1, { Scale = 0.9 }, SINE) knob.Size = UDim2.fromOffset(20, 16) end)
+    trackBtn.MouseButton1Up:Connect(function() tw(press, 0.35, { Scale = 1 }, BACK) knob.Size = UDim2.fromOffset(16, 16) end)
+    trackBtn.MouseLeave:Connect(function() tw(press, 0.2, { Scale = 1 }, SINE) knob.Size = UDim2.fromOffset(16, 16) end)
+    trackBtn.MouseButton1Click:Connect(function() sfx() sw:Set(not state) end)
+    sw.Frame = trackBtn
     return sw
 end
 
@@ -390,10 +353,9 @@ local function makeSlider(parent, o)
     local value = clamp(o.Default or mn, mn, mx)
     local f = new("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, LayoutOrder = o.Order or 0 })
     label(f, o.Name or "Slider", UDim2.new(), UDim2.new(1, -70, 0, 18), Enum.Font.GothamMedium, 13, B"Text")
-    local out = label(f, "", UDim2.new(1, 0, 0, 0), UDim2.fromOffset(70, 18), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right)
+    local out = dyn(label(f, "", UDim2.new(1, 0, 0, 0), UDim2.fromOffset(70, 18), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right))
     out.AnchorPoint = V2(1, 0)
     local bar = new("Frame", { Parent = f, Position = UDim2.new(0, 0, 0, 29), Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = B"Bg" }, { corner(2) })
-    -- заливка с градиентом Accent2 → Accent (фон белый, чтобы градиент не тускнел)
     local fill = new("Frame", { Parent = bar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE }, { corner(2) })
     Lib.Grad(fill, "lin")
     local knob = new("Frame", { Parent = bar, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0, 0.5),
@@ -402,7 +364,8 @@ local function makeSlider(parent, o)
         Size = UDim2.fromOffset(12, 12), BackgroundColor3 = B"Accent", BackgroundTransparency = 1, ZIndex = 1 }, { corner(20) })
     local function fmt(v)
         if step >= 1 then return string.format("%d", v) end
-        return string.format(step < 0.1 and "%.3f" or "%.2f", v):gsub("0+$", ""):gsub("%.$", "")
+        local s = string.format(step < 0.1 and "%.3f" or "%.2f", v):gsub("0+$", ""):gsub("%.$", "")
+        return s
     end
     local function render(fast)
         local r = (value - mn) / (mx - mn)
@@ -448,9 +411,6 @@ end
 
 local function flag(o, api) if o.Flag then Lib.Flags[o.Flag] = api end end
 
---=====================================================================
---  WINDOW
---=====================================================================
 function Lib:CreateWindow(cfg)
     cfg = cfg or {}
     local Icons = cfg.Icons or {}
@@ -485,10 +445,8 @@ function Lib:CreateWindow(cfg)
     Win.Gui = gui
     Lib._gui = gui
 
-    -- кнопка-Modal (освобождает мышь в играх с залоченным курсором)
     local modalBtn = new("TextButton", { Parent = gui, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Modal = false })
 
-    -- «склад» для скрытых карточек (чтобы не терялись темы)
     local stash = Instance.new("Folder")
     stash.Name = "Stash"
 
@@ -500,12 +458,10 @@ function Lib:CreateWindow(cfg)
     end
     Win.BlurSize, Win.BlurOn, Win.DimAmt = 14, false, 0.35
 
-    -- root: прозрачный контейнер + UICorner(22) — UIShadow берёт форму отсюда, main при этом может клипать содержимое
     local root = new("Frame", { Parent = gui, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ZIndex = 2 }, { corner(22) })
     local scale = new("UIScale", { Parent = root })
 
-    -- viewport кэшируется один раз; fit() не лезет в workspace каждый вызов
     local vpSize = V2(1280, 720)
     local function readViewport()
         local cam = workspace.CurrentCamera
@@ -525,13 +481,8 @@ function Lib:CreateWindow(cfg)
         end
     end
 
-    ------------------------------------------------------------------
-    --  SHADOWS (native UIShadow)
-    ------------------------------------------------------------------
     local shadowList, statics = {}, {}
 
-    -- Анимированная «дышащая» тень. Двигаем Blur / Spread / Transparency / Color.
-    -- Размер, угол и масштаб подхватываются от родителя автоматически.
     function Win:AnimatedShadow(target, o)
         o = o or {}
         local e = {
@@ -562,7 +513,6 @@ function Lib:CreateWindow(cfg)
         return e
     end
 
-    -- Статичная тень (карточки, сайдбар, тулбар, тултип...). Обновляется только при смене темы/настроек/hover.
     function Win:Shadow(target, o)
         o = o or {}
         local e = { Target = target, Alpha = o.Alpha or 0.3, Key = o.Key or "Accent2", Kind = o.Kind, Blur = o.Blur or 16, Hov = false }
@@ -624,7 +574,6 @@ function Lib:CreateWindow(cfg)
     main.MouseEnter:Connect(function() Win.RootShadow:SetHover(true) Win.OverMenu = true end)
     main.MouseLeave:Connect(function() Win.RootShadow:SetHover(false) Win.OverMenu = false end)
 
-    -- фон-картинка меню
     Win.BgImage = new("ImageLabel", { Parent = main, Size = UDim2.fromScale(1.05, 1.05), Position = UDim2.fromScale(-0.025, -0.025),
         BackgroundTransparency = 1, Image = "", ImageTransparency = 1, ScaleType = Enum.ScaleType.Crop, ZIndex = 0 })
     Win.BgDim = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, ZIndex = 0 }, { corner(22) })
@@ -642,7 +591,6 @@ function Lib:CreateWindow(cfg)
         mkEdge(180, V2(1, 0), UDim2.fromScale(1, 0), UDim2.fromScale(0.2, 1))
     end
 
-    -- частицы
     local particleLayer = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 0 })
     local partCount = 0
     task.spawn(function()
@@ -660,9 +608,6 @@ function Lib:CreateWindow(cfg)
         end
     end)
 
-    ------------------------------------------------------------------
-    --  BACKGROUND SYSTEM
-    ------------------------------------------------------------------
     local Bg = {
         Enabled = false, ImageId = "", Opacity = 1, Dim = 0.45, DimColor = "Black", DimCustom = rgb(0, 0, 0),
         Tint = WHITE, TintStrength = 0, Parallax = 0.02, KenBurns = false, KenSpeed = 0.08,
@@ -746,9 +691,6 @@ function Lib:CreateWindow(cfg)
         end
     end
 
-    ------------------------------------------------------------------
-    --  SIDEBAR
-    ------------------------------------------------------------------
     local side = new("Frame", { Parent = main, Position = UDim2.fromOffset(14, 14), Size = UDim2.new(0, 196, 1, -28), BackgroundColor3 = B"Side" }, { corner(18), stk() })
     glassT(side, 0.1)
     Win:Shadow(side, { Alpha = 0.32, Blur = 16, OffY = 3, Key = "Accent2" })
@@ -780,14 +722,11 @@ function Lib:CreateWindow(cfg)
         Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=100&h=100" }, { corner(17) })
     local accName = label(account, LocalPlayer.DisplayName, UDim2.fromOffset(54, 12), UDim2.new(1, -86, 0, 18), Enum.Font.GothamBold, 13, B"Text")
     Win:StreamLabel(accName, LocalPlayer.DisplayName, "Hidden")
-    label(account, cfg.Version or "v1.0", UDim2.fromOffset(54, 30), UDim2.new(1, -86, 0, 14), Enum.Font.Gotham, 10, B"Sub")
+    label(account, cfg.Version or "v5.0", UDim2.fromOffset(54, 30), UDim2.new(1, -86, 0, 14), Enum.Font.Gotham, 10, B"Sub")
     local accArrow = label(account, ">", UDim2.new(1, -24, 0, 0), UDim2.fromOffset(14, 58), Enum.Font.GothamBold, 13, B"Sub", Enum.TextXAlignment.Center)
     account.MouseEnter:Connect(function() tw(account, 0.25, { BackgroundColor3 = Theme.Panel2 }, SINE) tw(accArrow, 0.3, { Position = UDim2.new(1, -20, 0, 0) }, QUINT) end)
     account.MouseLeave:Connect(function() tw(account, 0.3, { BackgroundColor3 = Theme.Panel }, SINE) tw(accArrow, 0.3, { Position = UDim2.new(1, -24, 0, 0) }, QUINT) end)
 
-    ------------------------------------------------------------------
-    --  TOOLBAR
-    ------------------------------------------------------------------
     local TBW = W - 238
     local toolbar = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 14), Size = UDim2.fromOffset(TBW, 52), BackgroundColor3 = B"Panel" }, { corner(16), stk() })
     glassT(toolbar, 0.1)
@@ -798,8 +737,8 @@ function Lib:CreateWindow(cfg)
     Win.FpsLabel, Win.PingLabel = fpsL, pingL
 
     local function tbBtn(rightOff, text, w)
-        local b = new("TextButton", { Parent = toolbar, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -rightOff, 0.5, 0),
-            Size = UDim2.fromOffset(w or 36, 36), BackgroundColor3 = B"Bg", Text = text or "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 13 }, { corner(11) })
+        local b = dyn(new("TextButton", { Parent = toolbar, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -rightOff, 0.5, 0),
+            Size = UDim2.fromOffset(w or 36, 36), BackgroundColor3 = B"Bg", Text = text or "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 13 }, { corner(11) }))
         local sc = new("UIScale", { Parent = b })
         b.MouseEnter:Connect(function() tw(b, 0.2, { BackgroundColor3 = Theme.Panel2 }, SINE) tw(sc, 0.3, { Scale = 1.08 }, BACK) end)
         b.MouseLeave:Connect(function() tw(b, 0.25, { BackgroundColor3 = Theme.Bg }, SINE) tw(sc, 0.25, { Scale = 1 }, SINE) end)
@@ -829,19 +768,14 @@ function Lib:CreateWindow(cfg)
     drag(toolbar, root, canDrag)
     drag(brand, root, canDrag)
 
-    ------------------------------------------------------------------
-    --  CONTENT
-    ------------------------------------------------------------------
     local content = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 80), Size = UDim2.fromOffset(TBW, H - 80 - 38), BackgroundColor3 = B"Bg", ClipsDescendants = true }, { corner(18), stk() })
     glassT(content, 0.03)
     local pageTitle = label(content, "", UDim2.fromOffset(22, 14), UDim2.new(1, -220, 0, 32), Enum.Font.GothamBold, 26, B"Text")
     local pageSub = label(content, "", UDim2.fromOffset(22, 48), UDim2.new(1, -220, 0, 16), Enum.Font.Gotham, 12, B"Sub")
-    -- тонкая градиентная «подчёркивающая» полоска под заголовком
     local titleBar = new("Frame", { Parent = content, Position = UDim2.fromOffset(22, 68), Size = UDim2.fromOffset(38, 2), BackgroundColor3 = WHITE }, { corner(1) })
     Lib.Grad(titleBar, "lin")
     drag(pageTitle, root, canDrag)
 
-    -- боковой отступ скролла = запас под тени карточек (иначе UIShadow обрежется клипом ScrollingFrame)
     local SCROLL_X = 4
     local scroll = new("ScrollingFrame", { Parent = content, Position = UDim2.fromOffset(SCROLL_X, 80), Size = UDim2.new(1, -SCROLL_X * 2, 1, -92), BackgroundTransparency = 1,
         ScrollBarThickness = 3, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -858,12 +792,9 @@ function Lib:CreateWindow(cfg)
     local emptyL = label(content, "Nothing found.", UDim2.fromOffset(0, 220), UDim2.new(1, 0, 0, 20), Enum.Font.GothamMedium, 13, B"Sub", Enum.TextXAlignment.Center)
     emptyL.Visible = false
 
-    local footL = label(main, "RSHIFT · HIDE   /   RMB · SETTINGS   /   ★ · FAVORITE", UDim2.fromOffset(238, H - 30), UDim2.fromOffset(420, 14), Enum.Font.GothamMedium, 10, B"Sub")
-    label(main, cfg.Version or "v1.0", UDim2.new(1, -150, 1, -30), UDim2.fromOffset(130, 14), Enum.Font.GothamMedium, 10, B"Sub", Enum.TextXAlignment.Right)
+    label(main, "RSHIFT · HIDE   /   RMB · SETTINGS   /   ★ · FAVORITE", UDim2.fromOffset(238, H - 30), UDim2.fromOffset(420, 14), Enum.Font.GothamMedium, 10, B"Sub")
+    label(main, cfg.Version or "v5.0", UDim2.new(1, -150, 1, -30), UDim2.fromOffset(130, 14), Enum.Font.GothamMedium, 10, B"Sub", Enum.TextXAlignment.Right)
 
-    ------------------------------------------------------------------
-    --  RIPPLE
-    ------------------------------------------------------------------
     local function ptr(input)
         if input.UserInputType == Enum.UserInputType.Touch then
             return V2(input.Position.X, input.Position.Y) + GuiService:GetGuiInset()
@@ -879,11 +810,9 @@ function Lib:CreateWindow(cfg)
         Debris:AddItem(r, 1)
     end
 
-    ------------------------------------------------------------------
-    --  TOOLTIP / NOTIFY
-    ------------------------------------------------------------------
     local tip = new("TextLabel", { Parent = gui, Size = UDim2.new(0, 0, 0, 24), AutomaticSize = AUTO_X, BackgroundColor3 = B"Panel2",
         Text = "", TextColor3 = B"Text", TextSize = 11, Visible = false, ZIndex = 200 }, { corner(8), stk(), pad(0, 0, 10, 10) })
+    dyn(tip)
     Win:Shadow(tip, { Alpha = 0.45, Blur = 12, OffY = 3, Key = "Accent" })
     local function showTip(text, obj)
         if not text or text == "" then return end
@@ -905,7 +834,6 @@ function Lib:CreateWindow(cfg)
     end
     local KIND = { ok = SEM.Green, warn = SEM.Yellow, err = SEM.Red }
     local notifStack, notifSound = {}, nil
-    -- kind: "ok" | "warn" | "err" | Color3 | nil
     function Win:Notify(title, text, dur, kind, force)
         if not Win.NotifsOn and not force then return end
         dur = dur or Win.NotifTime
@@ -925,7 +853,6 @@ function Lib:CreateWindow(cfg)
             if old and old.Close then old.Close() end
         end
 
-        -- wrap (место в списке) > slide (двигается, держит UIShadow) > card (стекло, прозрачность)
         local wrap = new("Frame", { Parent = nholder, Size = UDim2.fromOffset(NW, NH), BackgroundTransparency = 1 })
         local slide = new("Frame", { Parent = wrap, Position = UDim2.fromOffset((NW + 60) * dir, 0), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, { corner(16) })
         local nsh = makeShadow(slide, { Color = col, Blur = 22, OffY = 6, Transparency = 1, Behind = Win.ShadowBehind })
@@ -1006,9 +933,6 @@ function Lib:CreateWindow(cfg)
         end)
     end
 
-    ------------------------------------------------------------------
-    --  CONFIRM
-    ------------------------------------------------------------------
     local confirm = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 80 })
     local cBox = new("Frame", { Parent = confirm, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(340, 150), BackgroundColor3 = B"Panel", ZIndex = 81 }, { corner(16), stk() })
     Win:Shadow(cBox, { Alpha = 0.6, Blur = 26, OffY = 8, Key = "Accent", ZIndex = 2 })
@@ -1038,9 +962,6 @@ function Lib:CreateWindow(cfg)
         tw(cScale, 0.45, { Scale = 1 }, BACK)
     end
 
-    ------------------------------------------------------------------
-    --  FLOATING OPEN BUTTON
-    ------------------------------------------------------------------
     local openBtn = new("TextButton", { Parent = gui, AnchorPoint = V2(1, 1), Position = UDim2.new(1, -24, 1, -24), Size = UDim2.fromOffset(48, 48),
         BackgroundColor3 = B"Accent", Visible = false, ZIndex = 70, Text = string.sub(cfg.Title or "F", 1, 1), TextColor3 = B"OnAccent", Font = Enum.Font.GothamBlack, TextSize = 20 }, { corner(24) })
     local openScale = new("UIScale", { Parent = openBtn })
@@ -1059,17 +980,7 @@ function Lib:CreateWindow(cfg)
     Win:AnimatedShadow(openBtn, { Size = 22, Alpha = 0.12, OffY = 4 })
     openBtn.MouseEnter:Connect(function() tw(openScale, 0.3, { Scale = 1.12 }, BACK) end)
     openBtn.MouseLeave:Connect(function() tw(openScale, 0.3, { Scale = 1 }, SINE) end)
---[[
-    ЗАМЕНИ в библиотеке всё от строки
-        --  KEYBIND LIST (HUD) v2
-    до строки (включительно, перед MAIN LOOP) конца функции
-        function Win:SetStreamer(on) ... end
-    на этот блок целиком.
-]]
 
-    ------------------------------------------------------------------
-    --  KEYBIND LIST (HUD) v3
-    ------------------------------------------------------------------
     local HUD_W, HUD_ROW = 226, 28
     local hud = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 100), Size = UDim2.fromOffset(HUD_W, 0), AutomaticSize = AUTO_Y,
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.06, Visible = false, ZIndex = 60 },
@@ -1087,7 +998,6 @@ function Lib:CreateWindow(cfg)
 
     local hudCount, hudHead
     do
-        -- шапка (клик = показывать только активные)
         hudHead = new("TextButton", { Parent = hud, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 })
         local badge = new("Frame", { Parent = hudHead, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 2, 0.5, 0),
             Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE }, { corner(8) })
@@ -1110,12 +1020,11 @@ function Lib:CreateWindow(cfg)
     end
     drag(hud, hud)
 
-    local hudRows = {} -- [entry] = row
+    local hudRows = {}
 
     local function mkHudRow()
         local r = {}
         r.Frame = new("Frame", { Parent = hud, Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false })
-        -- мягкая подсветка активной строки (слева направо)
         r.Hl = new("Frame", { Parent = r.Frame, Position = UDim2.fromOffset(0, 1), Size = UDim2.new(1, 0, 1, -2),
             BackgroundColor3 = WHITE, BackgroundTransparency = 1 },
             { corner(9), new("UIGradient", { Transparency = NumberSequence.new({ nk(0, 0), nk(1, 1) }) }) })
@@ -1161,7 +1070,6 @@ function Lib:CreateWindow(cfg)
 
     function Win:RefreshHud()
         local list = {}
-        -- модули тоже лежат в BindList, поэтому идём только по нему (раньше строки дублировались)
         for _, b in ipairs(Win.BindList) do
             if b.Hud and b.Key and not b.Static then list[#list + 1] = b end
         end
@@ -1208,9 +1116,6 @@ function Lib:CreateWindow(cfg)
     hudHead.MouseButton1Click:Connect(function() sfx() Win:SetBindsHudCompact(not Win.HudCompact) end)
     onTheme(function() if Win.RefreshHud then Win:RefreshHud() end end)
 
-    ------------------------------------------------------------------
-    --  WATERMARK v3
-    ------------------------------------------------------------------
     local WM_H = 38
     local wm = new("Frame", { Parent = gui, Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(0, WM_H), AutomaticSize = AUTO_X,
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.08, Visible = false, ZIndex = 60 },
@@ -1227,12 +1132,11 @@ function Lib:CreateWindow(cfg)
     wm.MouseEnter:Connect(function() wmShadow:SetHover(true) end)
     wm.MouseLeave:Connect(function() wmShadow:SetHover(false) end)
 
-    -- бренд: бейдж со статус-точкой, название и тег версии
     do
-        local brand = new("Frame", { Parent = wm, LayoutOrder = 0, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
+        local wbrand = new("Frame", { Parent = wm, LayoutOrder = 0, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
             { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8),
                 VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
-        local badge = new("Frame", { Parent = brand, LayoutOrder = 0, Size = UDim2.fromOffset(26, 26), BackgroundColor3 = WHITE }, { corner(9) })
+        local badge = new("Frame", { Parent = wbrand, LayoutOrder = 0, Size = UDim2.fromOffset(26, 26), BackgroundColor3 = WHITE }, { corner(9) })
         Lib.Spin(Lib.Grad(badge, "pill", 45), 60, function() return wm.Visible end)
         new("TextLabel", { Parent = badge, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = string.sub(cfg.Title or "F", 1, 1),
             Font = Enum.Font.GothamBlack, TextSize = 14, TextColor3 = WHITE })
@@ -1241,16 +1145,14 @@ function Lib:CreateWindow(cfg)
         pcall(function()
             TweenService:Create(dot, TweenInfo.new(1.1, SINE, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = 0.65 }):Play()
         end)
-        local title = dyn(new("TextLabel", { Parent = brand, LayoutOrder = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1,
+        local title = dyn(new("TextLabel", { Parent = wbrand, LayoutOrder = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1,
             Text = cfg.Title or "FEMBOYSENSE", Font = Enum.Font.GothamBlack, TextSize = 12, TextColor3 = WHITE }))
         Lib.Shimmer(Lib.Grad(title, "shine"))
-        dyn(new("TextLabel", { Parent = brand, LayoutOrder = 2, Size = UDim2.fromOffset(0, 16), AutomaticSize = AUTO_X,
-            BackgroundColor3 = B"Accent2", BackgroundTransparency = 0.55, Text = cfg.Version or "v1.0", Font = Enum.Font.GothamBold,
+        dyn(new("TextLabel", { Parent = wbrand, LayoutOrder = 2, Size = UDim2.fromOffset(0, 16), AutomaticSize = AUTO_X,
+            BackgroundColor3 = B"Accent2", BackgroundTransparency = 0.55, Text = cfg.Version or "v5.0", Font = Enum.Font.GothamBold,
             TextSize = 9, TextColor3 = B"Text" }, { corner(8), pad(0, 0, 7, 7) }))
     end
 
-    -- чип: разделитель | маркер (иконка или точка) | значение
-    -- tint=true: маркер повторяет цвет значения (зелёный/жёлтый/красный из главного цикла)
     local function wmChip(order, icon, width, text, tint)
         local f = new("Frame", { Parent = wm, LayoutOrder = order, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = AUTO_X, BackgroundTransparency = 1 },
             { pad(0, 0, 12, 0),
@@ -1306,7 +1208,6 @@ function Lib:CreateWindow(cfg)
         wm.Position = UDim2.new(right and 1 or 0, right and -18 or 18, bottom and 1 or 0, bottom and -18 or 18)
     end
     function Win:SetWatermarkChip(name, on) if Win.WMFrames[name] then Win.WMFrames[name].Visible = on end end
-    -- общая прозрачность стеклянных оверлеев (watermark + keybind HUD)
     function Win:SetWatermarkOpacity(v)
         local bgT, stT = 1 - v, 0.15 + (1 - v) * 0.6
         wm.BackgroundTransparency, hud.BackgroundTransparency = bgT, bgT
@@ -1319,9 +1220,6 @@ function Lib:CreateWindow(cfg)
         if Win.OnStreamer then Win.OnStreamer(on) end
     end
 
-    ------------------------------------------------------------------
-    --  MAIN LOOP
-    ------------------------------------------------------------------
     local frames, last, fpsAvg = 0, os.clock(), 60
     local decorAcc, clockT = 0, 0
     keep(RunService.RenderStepped:Connect(function(dt)
@@ -1360,7 +1258,6 @@ function Lib:CreateWindow(cfg)
             frames, last = 0, now
         end
 
-        -- единый «декор-тик» 30 Гц: вращение рамок, shimmer, пульс, анимированные тени
         decorAcc += dt
         if decorAcc >= DECOR_STEP then
             local d = decorAcc
@@ -1390,9 +1287,6 @@ function Lib:CreateWindow(cfg)
         if open and Bg.Enabled then bgStep(dt) end
     end))
 
-    ------------------------------------------------------------------
-    --  NAV LAYOUT
-    ------------------------------------------------------------------
     local function layoutNav(instant)
         local y = 0
         for _, g in ipairs(Win.Groups) do
@@ -1441,9 +1335,6 @@ function Lib:CreateWindow(cfg)
         return g
     end
 
-    ------------------------------------------------------------------
-    --  LAYOUT / SELECTION
-    ------------------------------------------------------------------
     local function visibleMods()
         local q, cat, list = Win.Query, Win.Current, {}
         for _, m in ipairs(Win.Modules) do
@@ -1486,7 +1377,9 @@ function Lib:CreateWindow(cfg)
         emptyL.Visible = (#list == 0 and tops == 0)
         if q ~= "" then
             setTxt(pageTitle, "Search")
+            setTxt(pageSub, "Results for")
             pageSub.Text = T("Results for") .. ' "' .. searchBox.Text .. '"'
+            dyn(pageSub)
         else
             setTxt(pageTitle, cat.Name)
             setTxt(pageSub, cat.Sub)
@@ -1556,7 +1449,6 @@ function Lib:CreateWindow(cfg)
             return cat:AddTop(f)
         end
 
-        -- карточка приветствия
         function cat:AddHero(o)
             o = o or {}
             local f = cat:AddCustom(104)
@@ -1588,7 +1480,6 @@ function Lib:CreateWindow(cfg)
             return f
         end
 
-        -- плитки FPS / PING / PLAYERS / TIME
         function cat:AddTiles(names)
             names = names or { "FPS", "PING", "PLAYERS", "TIME" }
             local f = cat:AddCustom(76)
@@ -1616,15 +1507,13 @@ function Lib:CreateWindow(cfg)
             local defKey = (o.Keybind ~= true) and o.Keybind or nil
             local mod = { Name = o.Name or "Module", Info = o.Info, Cat = cat, State = o.Default and true or false, Key = defKey, DefaultKey = defKey, Mode = o.Mode or "Toggle",
                 Static = o.Static, _n = 0, Search = ((o.Name or "") .. " " .. (o.Info or "")):lower(), Fav = false, Hud = true }
-            -- holder (прозрачная обёртка + UICorner + UIShadow + UIScale) > card (CanvasGroup: клипует и фейдит содержимое)
-            -- UIShadow нельзя класть в CanvasGroup — он бы обрезался канвасом, поэтому тень живёт на обёртке.
             local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 }, { corner(16) })
             mod.Scale = new("UIScale", { Parent = holder })
             local card = new("CanvasGroup", { Parent = holder, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundColor3 = B"Panel" },
                 { corner(16), pad(14, 14, 16, 16), new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }) })
             local cardStroke = stk()
             cardStroke.Parent = card
-            new("UIGradient", { Parent = cardStroke, Rotation = 90, Transparency = NumberSequence.new(0, 0.7) }) -- обводка «подсвечена» сверху
+            new("UIGradient", { Parent = cardStroke, Rotation = 90, Transparency = NumberSequence.new(0, 0.7) })
             glassT(card, 0.12)
             mod.Card, mod.Holder = card, holder
             mod.Shadow = Win:Shadow(holder, { Alpha = 0.2, Blur = 14, OffY = 3, Key = "Accent2", Kind = "card" })
@@ -1715,8 +1604,8 @@ function Lib:CreateWindow(cfg)
 
                 local status = new("Frame", { Parent = card, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 })
                 local stL = label(status, "Disabled", nil, UDim2.new(1, -140, 1, 0), Enum.Font.GothamMedium, 13, B"Sub")
-                local pill = new("TextButton", { Parent = status, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -50, 0.5, 0), Size = UDim2.fromOffset(0, 22), AutomaticSize = AUTO_X,
-                    BackgroundColor3 = B"Panel2", Text = "BIND", TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(7), pad(0, 0, 9, 9) })
+                local pill = dyn(new("TextButton", { Parent = status, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -50, 0.5, 0), Size = UDim2.fromOffset(0, 22), AutomaticSize = AUTO_X,
+                    BackgroundColor3 = B"Panel2", Text = "BIND", TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(7), pad(0, 0, 9, 9) }))
                 local pillScale = new("UIScale", { Parent = pill })
                 local function paintPill(listening)
                     pill.Text = listening and "..." or (mod.Key and keyName(mod.Key) or T("BIND"))
@@ -1757,14 +1646,13 @@ function Lib:CreateWindow(cfg)
                     elseif i.UserInputType == Enum.UserInputType.MouseButton3 then listen() end
                 end)
 
-                -- строка бинда в настройках (+ сброс к дефолту)
                 local krow = new("Frame", { Parent = sf, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
                 label(krow, "Keybind", nil, UDim2.new(1, -200, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
                 local modeB = new("TextButton", { Parent = krow, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -86, 0.5, 0), Size = UDim2.fromOffset(62, 24),
                     BackgroundColor3 = B"Panel2", Text = mod.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
                 modeB.MouseButton1Click:Connect(function() sfx() mod.Mode = mod.Mode == "Toggle" and "Hold" or "Toggle" setTxt(modeB, mod.Mode) end)
-                local kb = new("TextButton", { Parent = krow, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
-                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                local kb = dyn(new("TextButton", { Parent = krow, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
+                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) }))
                 local rb = resetBtn(krow, UDim2.new(1, -156, 0.5, 0), function() sfx() mod:SetKey(mod.DefaultKey) end)
                 local function paintKb(k)
                     kb.Text = k and keyName(k) or T("NONE")
@@ -1851,7 +1739,7 @@ function Lib:CreateWindow(cfg)
                 local ROW, ITEM, MAXV = 28, 26, 7
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, ROW), BackgroundTransparency = 1, ClipsDescendants = true })
                 label(row, t.Name or "Dropdown", UDim2.new(), UDim2.new(1, -150, 0, ROW), Enum.Font.GothamMedium, 13, B"Text")
-                local selL = label(row, tostring(sel or "-"), UDim2.new(1, -150, 0, 0), UDim2.fromOffset(130, ROW), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right)
+                local selL = dyn(label(row, tostring(sel or "-"), UDim2.new(1, -150, 0, 0), UDim2.fromOffset(130, ROW), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right))
                 local arrow = label(row, "v", UDim2.new(1, -14, 0, 0), UDim2.fromOffset(14, ROW), Enum.Font.GothamBold, 11, B"Sub", Enum.TextXAlignment.Center)
                 local list = new("ScrollingFrame", { Parent = row, Position = UDim2.fromOffset(0, ROW + 4), Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1,
                     ScrollBarThickness = 2, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y },
@@ -1957,8 +1845,8 @@ function Lib:CreateWindow(cfg)
                     BackgroundColor3 = B"Panel2", Text = b.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
                 local MODES = { "Press", "Toggle", "Hold" }
                 modeB.MouseButton1Click:Connect(function() sfx() b.Mode = MODES[(table.find(MODES, b.Mode) or 1) % 3 + 1] b.State = false setTxt(modeB, b.Mode) end)
-                local kb = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
-                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                local kb = dyn(new("TextButton", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
+                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) }))
                 local paint
                 local rb = resetBtn(row, UDim2.new(1, -156, 0.5, 0), function()
                     sfx()
@@ -1993,6 +1881,7 @@ function Lib:CreateWindow(cfg)
                     b.Key = v.Key and keyFromName(v.Key) or nil
                     if v.Mode and table.find(MODES, v.Mode) then b.Mode = v.Mode setTxt(modeB, v.Mode) end
                     paint() Win:RefreshHud()
+                    if t.Changed then fire(t.Changed, b.Key) end
                 end
                 flag(t, api)
                 return api
@@ -2058,7 +1947,6 @@ function Lib:CreateWindow(cfg)
                 return api
             end
 
-            -- список с поиском / multi-выбором / кнопками
             function mod:AddSelection(t)
                 t = t or {}
                 addWord(t.Name or "")
@@ -2145,7 +2033,11 @@ function Lib:CreateWindow(cfg)
                     r:SetAttribute("SelName", name)
                     r.MouseButton1Click:Connect(function() selectItem(name, true) end)
                     r.MouseButton2Click:Connect(function()
-                        if isSel(name) then selectedSet[name] = nil paintAll() updateBadge() fireSelect(api:GetSelected()) end
+                        if isSel(name) then
+                            selectedSet[name] = nil
+                            paintAll() updateBadge()
+                            fireSelect(isMulti and name or nil)
+                        end
                     end)
                     r.MouseEnter:Connect(function() if not isSel(name) then tw(r, 0.2, { BackgroundColor3 = Theme.Panel2:Lerp(Theme.Accent, 0.2) }, SINE) end end)
                     r.MouseLeave:Connect(function() if not isSel(name) then tw(r, 0.2, { BackgroundColor3 = Theme.Panel2 }, SINE) end end)
@@ -2191,7 +2083,8 @@ function Lib:CreateWindow(cfg)
                     else
                         selectedSet = (type(v) == "string" and itemRows[v]) and { [v] = true } or {}
                     end
-                    paintAll() updateBadge() fireSelect(api:GetSelected())
+                    paintAll() updateBadge()
+                    if isMulti then fireSelect(nil) else fireSelect((api:GetSelected())) end
                 end
                 function api:Refresh() render() end
                 function api:AddButton(text, cb)
@@ -2215,7 +2108,7 @@ function Lib:CreateWindow(cfg)
                 end
                 api.Export = function()
                     if isMulti then return { Multi = true, Selected = api:GetSelected() } end
-                    return { Multi = false, Selected = api:GetSelected() }
+                    return { Multi = false, Selected = (api:GetSelected()) }
                 end
                 api.Import = function(v)
                     if type(v) ~= "table" then return end
@@ -2265,9 +2158,6 @@ function Lib:CreateWindow(cfg)
         return cat
     end
 
-    ------------------------------------------------------------------
-    --  WINDOW API
-    ------------------------------------------------------------------
     function Win:SetGlass(on)
         Win.Glass = on and true or false
         for _, g in ipairs(glassObjs) do tw(g[1], 0.4, { BackgroundTransparency = glassFinal(g) }, SINE) end
@@ -2382,7 +2272,6 @@ function Lib:CreateWindow(cfg)
     end)
     function Win:SetLanguage(l) Lib:SetLang(l) setLangBtn() if Win.Current then setTxt(pageTitle, Win.Current.Name) setTxt(pageSub, Win.Current.Sub) end Win:RefreshHud() end
 
-    -- избранное
     Lib.Flags._Favs = {
         Export = function() local t = {} for n in pairs(Win.Favs) do t[#t + 1] = n end return t end,
         Import = function(v)
@@ -2392,7 +2281,6 @@ function Lib:CreateWindow(cfg)
             for _, m in ipairs(Win.Modules) do if m.SetFav then m:SetFav(Win.Favs[m.Name] == true) end end
         end,
     }
-    -- тема в конфиге
     Lib.Flags.Theme = {
         Export = function() return { Name = Win.ThemeDef.Name, Mode = Win.ThemeDef.Mode } end,
         Import = function(v)
@@ -2403,7 +2291,6 @@ function Lib:CreateWindow(cfg)
             elseif v.Mode then Win:SetTheme({ Name = "Custom", Mode = v.Mode, Accent = Theme.Accent }, true) end
         end,
     }
-    -- слайд-шоу фона в конфиге
     Lib.Flags.BgSlideImages = {
         Export = function() return Bg.Images end,
         Import = function(v)
@@ -2416,7 +2303,6 @@ function Lib:CreateWindow(cfg)
         end,
     }
 
-    --// КОНФИГИ
     function Win:ExportString()
         local data = {}
         for f, a in pairs(Lib.Flags) do
@@ -2519,12 +2405,204 @@ function Lib:CreateWindow(cfg)
     end
     genv.FemboysenseUnload = function() Win:Destroy() end
 
-    ------------------------------------------------------------------
-    --  BUILT-IN SETTINGS + CURSOR + BACKGROUND + CONFIGS
-    ------------------------------------------------------------------
     function Win:Finish()
         if Win._finished then return end
         Win._finished = true
+
+        Win:AddGroup("FEATURES")
+
+        local musicCat = Win:AddCategory("Music",
+            Icons.Music or "MusicNote",
+            "Custom player with playlist, volume and visualizer.")
+        Win.MusicCat = musicCat
+
+        local musicMod = musicCat:AddModule({
+            Name = "Player",
+            Icon = Icons.Music or "MusicNote",
+            Info = "Play any Roblox audio by ID",
+            Static = true,
+        })
+
+        local musicSound = Instance.new("Sound")
+        musicSound.Volume = 0.5
+        musicSound.Looped = true
+        musicSound.Parent = SoundService
+        Win:OnUnload(function() pcall(function() musicSound:Destroy() end) end)
+
+        local tracks = {
+            { Name = "Chill",   Id = 1837879082 },
+            { Name = "Lo-Fi",   Id = 1836303536 },
+            { Name = "Ambient", Id = 130798493  },
+        }
+
+        local playlistApi = musicMod:AddSelection({
+            Name = "Playlist",
+            Height = 170,
+            SearchPlaceholder = "Search tracks...",
+            EmptyText = "No tracks yet — add one below.",
+            OnSelect = function(name, meta)
+                if meta and type(meta) == "table" and meta.Id then
+                    musicSound.SoundId = "rbxassetid://" .. meta.Id
+                    musicSound:Play()
+                end
+            end,
+        })
+        for _, t in ipairs(tracks) do playlistApi:Add(t.Name, { Id = t.Id }) end
+
+        musicMod:AddButton({ Name = "Play / Pause", ButtonText = "TOGGLE", Callback = function()
+            if musicSound.IsPlaying then musicSound:Pause()
+            elseif musicSound.SoundId ~= "" then musicSound:Resume() end
+        end })
+        musicMod:AddButton({ Name = "Stop", ButtonText = "STOP", Callback = function()
+            musicSound:Stop()
+        end })
+        musicMod:AddSlider({ Name = "Volume", Min = 0, Max = 1, Step = 0.05, Default = 0.5,
+            Callback = function(v) musicSound.Volume = v end })
+        local idBox
+        idBox = musicMod:AddTextbox({ Name = "Add track by ID", Placeholder = "Roblox audio ID, press Enter",
+            Callback = function(text, enter)
+                if not enter then return end
+                local id = tonumber(text)
+                if not id then return end
+                for _, t in ipairs(tracks) do if t.Id == id then return end end
+                local name = "Track " .. id
+                table.insert(tracks, { Name = name, Id = id })
+                playlistApi:Add(name, { Id = id })
+                idBox:Set("")
+            end })
+
+        local visHolder = musicMod:AddCustom(52)
+        local visBars = {}
+        for i = 1, 24 do
+            visBars[i] = new("Frame", {
+                Parent = visHolder,
+                BackgroundColor3 = Theme.Accent,
+                Size = UDim2.new(1/24, -2, 0.05, 0),
+                Position = UDim2.new((i - 1)/24, 1, 0.95, 0),
+            }, { corner(2) })
+        end
+        keep(RunService.RenderStepped:Connect(function()
+            if not (Win.Open and Win.Current == musicCat) then return end
+            local loud = musicSound.IsPlaying and (musicSound.PlaybackLoudness / 1000) or 0
+            local t = os.clock()
+            for i, b in ipairs(visBars) do
+                if b.Parent then
+                    local h = math.clamp(loud * (0.35 + 0.65 * math.abs(math.sin(t * 4 + i * 0.4))), 0.03, 0.95)
+                    b.Size = UDim2.new(1/24, -2, h, 0)
+                    b.Position = UDim2.new((i - 1)/24, 1, 0.95 - h, 0)
+                    b.BackgroundColor3 = Theme.Accent
+                end
+            end
+        end))
+
+        local chatCat = Win:AddCategory("Chat",
+            Icons.Chat or "Chat",
+            "In-hub messenger with optional Roblox bridge.")
+        Win.ChatCat = chatCat
+
+        local chatMod = chatCat:AddModule({
+            Name = "Messenger",
+            Icon = Icons.Chat or "Chat",
+            Info = "Talk with everyone in the game",
+            Static = true,
+        })
+
+        local chatHolder = chatMod:AddCustom(260)
+        local chatBg = new("Frame", { Parent = chatHolder, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = B"Bg" }, { corner(12), stk() })
+
+        local scrollChat = new("ScrollingFrame", {
+            Parent = chatBg,
+            Position = UDim2.fromOffset(8, 8),
+            Size = UDim2.new(1, -16, 1, -50),
+            BackgroundTransparency = 1,
+            ScrollBarThickness = 2,
+            ScrollBarImageColor3 = B"Accent",
+            CanvasSize = UDim2.new(),
+            AutomaticCanvasSize = AUTO_Y,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
+        }, { new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }) })
+
+        local inputBack = new("Frame", {
+            Parent = chatBg, Position = UDim2.new(0, 8, 1, -42),
+            Size = UDim2.new(1, -62, 0, 34), BackgroundColor3 = B"Panel",
+        }, { corner(10), stk() })
+
+        local chatInput = new("TextBox", {
+            Parent = inputBack,
+            Position = UDim2.fromOffset(10, 0),
+            Size = UDim2.new(1, -20, 1, 0),
+            BackgroundTransparency = 1,
+            PlaceholderText = "Type a message...",
+            PlaceholderColor3 = B"Sub",
+            Text = "", TextColor3 = B"Text", TextSize = 12,
+            ClearTextOnFocus = false,
+            TextXAlignment = Enum.TextXAlignment.Left,
+        })
+
+        local sendBtn = new("TextButton", {
+            Parent = chatBg,
+            Position = UDim2.new(1, -46, 1, -42),
+            Size = UDim2.fromOffset(38, 34),
+            BackgroundColor3 = B"Accent", Text = "→",
+            TextColor3 = B"OnAccent",
+            Font = Enum.Font.GothamBold, TextSize = 16,
+        }, { corner(10) })
+
+        local msgCount = 0
+        local function addChatMessage(sender, text, isMe)
+            msgCount += 1
+            local col = isMe and Theme.Accent or (sender == "System" and Theme.Sub or Theme.Text)
+            dyn(new("TextLabel", {
+                Parent = scrollChat, LayoutOrder = msgCount,
+                Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y,
+                BackgroundTransparency = 1,
+                Text = sender .. ": " .. text,
+                TextColor3 = col, Font = Enum.Font.GothamMedium,
+                TextSize = 12, TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+            }))
+            task.delay(0.05, function()
+                if scrollChat.Parent then
+                    scrollChat.CanvasPosition = V2(0, math.max(0, scrollChat.AbsoluteCanvasSize.Y - scrollChat.AbsoluteSize.Y))
+                end
+            end)
+        end
+        addChatMessage("System", "Welcome to Femboysense Chat", false)
+
+        local function trySendToRoblox(text)
+            pcall(function()
+                local TCS = game:GetService("TextChatService")
+                if TCS.ChatVersion == Enum.ChatVersion.TextChatService then
+                    local channels = TCS:FindFirstChild("TextChannels")
+                    if channels then
+                        local rb = channels:FindFirstChild("RBXGeneral")
+                        if rb and rb:IsA("TextChannel") then rb:SendAsync(text) end
+                    end
+                end
+            end)
+        end
+
+        local function sendChat()
+            local txt = chatInput.Text
+            if not txt or txt == "" then return end
+            addChatMessage(LocalPlayer.DisplayName, txt, true)
+            chatInput.Text = ""
+            trySendToRoblox(txt)
+        end
+        sendBtn.MouseButton1Click:Connect(function() sfx() sendChat() end)
+        chatInput.FocusLost:Connect(function(enter) if enter then sendChat() end end)
+
+        pcall(function()
+            local TCS = game:GetService("TextChatService")
+            if TCS.ChatVersion == Enum.ChatVersion.TextChatService then
+                keep(TCS.MessageReceived:Connect(function(msg)
+                    if msg.TextSource and msg.TextSource.UserId ~= LocalPlayer.UserId then
+                        addChatMessage(msg.TextSource.Name or "User", msg.Text, false)
+                    end
+                end))
+            end
+        end)
 
         Win:AddGroup("SYSTEM")
         local st = Win:AddCategory("Settings", Icons.Settings, "Theme, window, overlays and notifications.")
@@ -2533,7 +2611,6 @@ function Lib:CreateWindow(cfg)
         local cf = Win:AddCategory("Configs", Icons.Configs, "Save, load and share your setups.")
         Win.SettingsCat = st
 
-        -- сетка тем
         local rows = math.ceil(#THEMES / 4)
         local grid = st:AddCustom(rows * 96)
         new("UIGridLayout", { Parent = grid, CellSize = UDim2.new(0.25, -9, 0, 84), CellPadding = UDim2.fromOffset(12, 12), SortOrder = Enum.SortOrder.LayoutOrder })
@@ -2635,9 +2712,6 @@ function Lib:CreateWindow(cfg)
         nt:AddToggle({ Name = "UI sounds", Flag = "UISounds", Callback = function(v) Win:SetSounds(v) end })
         nt:AddSlider({ Name = "UI volume", Min = 0, Max = 100, Default = 50, Suffix = "%", Flag = "UIVol", Callback = function(v) Lib.SoundVol = v / 100 end })
 
-        --------------------------------------------------------------
-        --  CUSTOM CURSOR
-        --------------------------------------------------------------
         local Cursor = {
             Enabled = false, Style = "Arrow", Size = 1, Mode = "Theme", Custom = rgb(255, 255, 255),
             RainbowSpeed = 0.4, Alpha = 1, Outline = true, Glow = false,
@@ -2672,8 +2746,7 @@ function Lib:CreateWindow(cfg)
         end
         local STYLES = {}
         STYLES.Arrow = function()
-            disc(34, 6, 9, "glow", 0.10, 1)
-            disc(54, 6, 9, "glow", 0.05, 1)
+            disc(34, 6, 9, "glow", 0.10, 1) disc(54, 6, 9, "glow", 0.05, 1)
             cReg(new("Frame", { Parent = CShape, Position = UDim2.fromOffset(-1, -1), Size = UDim2.fromOffset(4, 1), ZIndex = 2 }), "outline")
             for i = 0, 17 do
                 local w = math.floor(i * 0.65) + 2
@@ -2897,9 +2970,6 @@ function Lib:CreateWindow(cfg)
             Win:Notify("Cursor", "Settings reset", 2, "ok")
         end })
 
-        --------------------------------------------------------------
-        --  BACKGROUND UI
-        --------------------------------------------------------------
         local b1 = bgCat:AddModule({ Name = "Image", Icon = Icons.Visuals, Static = true })
         b1:AddToggle({ Name = "Enabled", Flag = "BgEnabled", Callback = function(v) Bg.Enabled = v Win:ApplyBackground() end })
         b1:AddTextbox({ Name = "Image ID / URL", Placeholder = "rbxassetid://123 or 123", Flag = "BgImageId", Callback = function(t) Bg.ImageId = t Win:ApplyBackground() end })
@@ -2920,20 +2990,22 @@ function Lib:CreateWindow(cfg)
         local b3 = bgCat:AddModule({ Name = "Slideshow", Icon = Icons.Visuals, Static = true })
         b3:AddToggle({ Name = "Slideshow", Flag = "BgSlideshow", Callback = function(v) Bg.Slideshow = v Win:ApplyBackground() end })
         b3:AddSlider({ Name = "Interval", Min = 3, Max = 60, Step = 1, Default = 15, Suffix = "s", Flag = "BgSlideTime", Callback = function(v) Bg.SlideTime = v end })
-        local slideInfo = b3:AddLabel("Slideshow: 0 images", 20)
+        local slideInfo = dyn(b3:AddLabel("Slideshow: 0 images", 20))
         Win.RefreshSlideInfo = function()
             slideInfo.Text = string.format("Slideshow: %d images (current: %d/%d)", #Bg.Images,
                 clamp(Bg.Index, 1, math.max(#Bg.Images, 1)), math.max(#Bg.Images, 1))
         end
         Win.RefreshSlideInfo()
-        b3:AddTextbox({ Name = "Add image", Placeholder = "paste ID, press Enter", Callback = function(t)
-            if t == "" then return end
+        local addImg
+        addImg = b3:AddTextbox({ Name = "Add image", Placeholder = "paste ID, press Enter", Callback = function(t, enter)
+            if not enter or t == "" then return end
             local id = resolveImageId(t)
             if id == "" then Win:Notify("Background", "Invalid image ID", 2, "err") return end
             table.insert(Bg.Images, id)
             Win.RefreshSlideInfo()
             Win:Notify("Background", "Added (" .. #Bg.Images .. " total)", 2, "ok")
             Win:ApplyBackground()
+            addImg:Set("")
         end })
         b3:AddButton({ Name = "Add current image", ButtonText = "ADD", Callback = function()
             local id = resolveImageId(Bg.ImageId)
@@ -2980,9 +3052,6 @@ function Lib:CreateWindow(cfg)
         b4:AddButton({ Name = "Random preset", ButtonText = "ROLL", Callback = function() applyPreset(BPRE[math.random(#BPRE)]) end })
         Win:ApplyBackground()
 
-        --------------------------------------------------------------
-        --  CONFIGS
-        --------------------------------------------------------------
         local cm = cf:AddModule({ Name = "Configs", Icon = Icons.Configs, Info = "Everything with a flag is saved", Static = true })
         local cfgName, cfgDD = "default", nil
         local function refresh() if cfgDD then cfgDD:Refresh(Win:ListConfigs()) end end
@@ -3014,14 +3083,12 @@ function Lib:CreateWindow(cfg)
 
         if Win.Current == nil then Win:Select(Win.Categories[1]) end
         layoutNav(true)
-        -- каскадное появление сайдбара
         for i, c in ipairs(Win.Categories) do
             if c.Btn.Visible then
                 c.Btn.Position = UDim2.fromOffset(-40, c.Y)
                 task.delay(0.25 + i * 0.03, function() tw(c.Btn, 0.6, { Position = UDim2.fromOffset(0, c.Y) }, BACK) end)
             end
         end
-        -- автозагрузка
         task.delay(1.2, function()
             pcall(function()
                 local p = FOLDER .. "/autoload.txt"
@@ -3033,9 +3100,6 @@ function Lib:CreateWindow(cfg)
         end)
     end
 
-    ------------------------------------------------------------------
-    --  INPUT
-    ------------------------------------------------------------------
     searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         Win.Query = searchBox.Text:lower():gsub("^%s+", ""):gsub("%s+$", "")
         if Win.Current then layout() end
@@ -3058,6 +3122,7 @@ function Lib:CreateWindow(cfg)
         end
         if gp then return end
         fireBinds(function(k) return keyMatch(k, input) end, true)
+        if input.KeyCode == Win.ToggleKey and not UIS:GetFocusedTextBox() then Win:Toggle() end
     end))
     keep(UIS.InputEnded:Connect(function(input) fireBinds(function(k) return keyMatch(k, input) end, false) end))
     local xHeld = {}
@@ -3073,11 +3138,6 @@ function Lib:CreateWindow(cfg)
                 else fireBinds(function(k) return k == name end, d) end
             end
         end
-    end))
-    -- клавиша меню — отдельно, чтобы работала даже без модулей
-    keep(UIS.InputBegan:Connect(function(input, gp)
-        if gp or Lib._listen then return end
-        if input.KeyCode == Win.ToggleKey and not UIS:GetFocusedTextBox() then Win:Toggle() end
     end))
 
     Win:SetNotifPos("Top Right")
