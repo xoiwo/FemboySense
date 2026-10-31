@@ -11,6 +11,15 @@ local TextService      = game:GetService("TextService")
 local GuiService       = game:GetService("GuiService")
 local Marketplace      = game:GetService("MarketplaceService")
 local LocalPlayer      = Players.LocalPlayer
+if not LocalPlayer then
+    repeat task.wait() until Players.LocalPlayer
+    LocalPlayer = Players.LocalPlayer
+end
+local BUILDER_FONT
+do
+    local ok, f = pcall(function() return Enum.Font.BuilderIcons end)
+    if ok and f then BUILDER_FONT = f end
+end
 
 local genv = (getgenv and getgenv()) or _G
 if genv.FemboysenseUnload then pcall(genv.FemboysenseUnload) end
@@ -233,10 +242,14 @@ local function makeIcon(parent, icon, pos, px)
         if isAsset then
             im = new("ImageLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
                 BackgroundTransparency = 1, Image = icon, ImageColor3 = Theme.Sub, ScaleType = Enum.ScaleType.Fit })
-        else
+        elseif BUILDER_FONT then
             im = dyn(new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
                 BackgroundTransparency = 1, Text = icon, TextColor3 = Theme.Sub,
-                TextSize = px, Font = Enum.Font.BuilderIcons }))
+                TextSize = px, Font = BUILDER_FONT }))
+        else
+            im = dyn(new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
+                BackgroundTransparency = 1, Text = "•", TextColor3 = Theme.Sub,
+                TextSize = px, Font = Enum.Font.GothamBold }))
         end
     else
         im = dyn(new("TextLabel", { Parent = parent, Position = pos or UDim2.new(), Size = UDim2.fromOffset(px, px),
