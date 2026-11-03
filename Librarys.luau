@@ -1,3 +1,25 @@
+--[[
+    ╔══════════════════════════════════════════════╗
+    ║   ZENITH UI LIBRARY  v7.0  ·  your best hub  ║
+    ╚══════════════════════════════════════════════╝
+
+    Быстрый старт:
+        local Lib = loadstring(...)()
+        local Win = Lib:CreateWindow({ Title = "ZENITH", Sub = "your best hub" })
+        local Combat = Win:AddCategory("Combat", nil, "Aim and combat tools")
+        local Aim = Combat:AddModule({ Name = "Aimbot", Info = "Locks onto targets", Flag = "Aimbot" })
+        Aim:AddSlider({ Name = "FOV", Min = 10, Max = 300, Default = 90, Flag = "AimFov" })
+        Win:Finish()
+
+    ESP-превью (окно, где видно, как выглядит ESP на твоём аватаре):
+        Win:ShowESPPreview(true)            -- плавающее окно
+        Cat:AddESPPreview()                 -- встроить на страницу
+        Win:ESPSet("Box", true)             -- Box, BoxStyle ("Full"/"Corner"), BoxColor, BoxFill, BoxFillColor,
+        Win:ESPSet("BoxColor", Color3...)   -- Name, NameColor, Health, HealthValue (0..1), Distance, Weapon,
+                                            -- Tracer, TracerColor, Chams, ChamsColor, ChamsTransparency
+        Win:ESPSetAvatar(userId)            -- показать другого игрока
+]]
+
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
@@ -5,7 +27,6 @@ local RunService   = game:GetService("RunService")
 local HttpService  = game:GetService("HttpService")
 local Stats        = game:GetService("Stats")
 local TextService  = game:GetService("TextService")
-local GuiService   = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -14,24 +35,32 @@ if not LocalPlayer then
 end
 
 local genv = (getgenv and getgenv()) or _G
-if genv.FemboysenseUnload then pcall(genv.FemboysenseUnload) end
+if genv.ZenithUnload then pcall(genv.ZenithUnload) end
 
 local BUILDER_FONT
 pcall(function() BUILDER_FONT = Enum.Font.BuilderIcons end)
 
+--══════════════════════════════════════════════════════════════
+--  Константы
+--══════════════════════════════════════════════════════════════
 local rgb, WHITE, BLACK = Color3.fromRGB, Color3.new(1, 1, 1), Color3.new(0, 0, 0)
-local SINE, QUINT, BACK = Enum.EasingStyle.Sine, Enum.EasingStyle.Quint, Enum.EasingStyle.Back
-local OUT, IN = Enum.EasingDirection.Out, Enum.EasingDirection.In
+local SINE, QUINT, BACK, QUART = Enum.EasingStyle.Sine, Enum.EasingStyle.Quint, Enum.EasingStyle.Back, Enum.EasingStyle.Quart
+local OUT, IN, INOUT = Enum.EasingDirection.Out, Enum.EasingDirection.In, Enum.EasingDirection.InOut
 local AUTO_X, AUTO_Y, AUTO_NONE = Enum.AutomaticSize.X, Enum.AutomaticSize.Y, Enum.AutomaticSize.None
+local CENTER = Enum.TextXAlignment.Center
 local V2 = Vector2.new
-local sin, clamp, floor = math.sin, math.clamp, math.floor
+local sin, cos, clamp, floor = math.sin, math.cos, math.clamp, math.floor
 
 local Lib = {
-    Flags = {}, Version = "v6.0", Speed = 1,
+    Flags = {}, Version = "v7.0", Speed = 1,
     Semantic = { Green = rgb(70, 225, 125), Yellow = rgb(255, 190, 60), Red = rgb(255, 70, 70) },
     ResetIcon = 140026246189675,
+    LogoId = 109855560382434,
 }
 
+--══════════════════════════════════════════════════════════════
+--  Темы
+--══════════════════════════════════════════════════════════════
 local DARK = { Bg = rgb(8, 8, 10), Side = rgb(17, 17, 20), Panel = rgb(26, 26, 30), Panel2 = rgb(40, 40, 46),
     Text = rgb(244, 244, 247), Sub = rgb(146, 146, 154), Stroke = WHITE, StrokeT = 0.93 }
 local LIGHT = { Bg = rgb(232, 232, 238), Side = rgb(246, 246, 250), Panel = rgb(255, 255, 255), Panel2 = rgb(233, 233, 240),
@@ -61,6 +90,7 @@ local THEMES = {
       Colors = { Bg = rgb(12, 10, 6), Side = rgb(18, 14, 8), Panel = rgb(27, 22, 13), Panel2 = rgb(39, 31, 18), Text = rgb(254, 252, 232), Sub = rgb(165, 155, 125) } },
 }
 Lib.Themes = THEMES
+local DEFAULT_THEME = THEMES[2]
 
 local Theme = {}
 local function loadTheme(def)
@@ -71,7 +101,7 @@ local function loadTheme(def)
     Theme.Accent2 = def.Accent2 or (def.Mode == "Light" and def.Accent:Lerp(WHITE, 0.4) or def.Accent:Lerp(BLACK, 0.58))
     Theme.OnAccent = def.Mode == "Light" and WHITE or rgb(12, 12, 14)
 end
-loadTheme(THEMES[2])
+loadTheme(DEFAULT_THEME)
 Lib.Theme = Theme
 
 local function kp(t, c) return ColorSequenceKeypoint.new(t, c) end
@@ -87,7 +117,10 @@ local function gradColor(kind)
     return ColorSequence.new(A, A2)
 end
 
-local reg, hooks, conns, grads = {}, {}, {}, {}
+--══════════════════════════════════════════════════════════════
+--  Реестры темы / твины
+--══════════════════════════════════════════════════════════════
+local reg, hooks, conns, grads, shadows = {}, {}, {}, {}, {}
 local function keep(c) conns[#conns + 1] = c return c end
 local function onTheme(fn) hooks[#hooks + 1] = fn fn(true) end
 
@@ -96,11 +129,65 @@ local function tw(obj, t, props, style, dir)
     tr:Play()
     return tr
 end
+local function after(t, fn) task.delay(t / Lib.Speed, fn) end
 
 local function B(key) return { __bind = key } end
 local function bind(obj, prop, key)
     obj[prop] = Theme[key]
     reg[#reg + 1] = { obj, prop, key }
+end
+
+--══════════════════════════════════════════════════════════════
+--  UIShadow (тени на всех элементах)
+--══════════════════════════════════════════════════════════════
+local HAS_SHADOW = pcall(function() Instance.new("UIShadow"):Destroy() end)
+local ShadowState = { On = true, Amount = 1 }
+local SH = {
+    Window = { Blur = 50, Y = 16, T = 0.30 },
+    Panel  = { Blur = 22, Y = 6,  T = 0.50 },
+    Card   = { Blur = 16, Y = 5,  T = 0.55 },
+    Small  = { Blur = 9,  Y = 3,  T = 0.58 },
+    Tiny   = { Blur = 5,  Y = 1,  T = 0.68 },
+    Glow   = { Blur = 12, Y = 0,  T = 0.55, Tone = "Accent" },
+    Text   = { Blur = 3,  Y = 1,  T = 0.45, Text = true },
+}
+local function shadowT(base) return clamp(1 - (1 - base) * ShadowState.Amount, 0, 1) end
+local function toneColor(tone) return tone == "Accent2" and Theme.Accent2 or Theme.Accent end
+
+local function addShadow(parent, spec)
+    if not HAS_SHADOW or not spec then return end
+    local ok, s = pcall(function()
+        local u = Instance.new("UIShadow")
+        u.BlurRadius = UDim.new(0, spec.Blur or 12)
+        u.Offset = UDim2.fromOffset(spec.X or 0, spec.Y or 4)
+        u.Spread = UDim2.fromOffset(spec.Spread or 0, spec.Spread or 0)
+        u.Color = spec.Tone and toneColor(spec.Tone) or BLACK
+        u.Transparency = shadowT(spec.T or 0.5)
+        u.Enabled = ShadowState.On
+        u.ShowBehindParent = spec.Behind == true
+        if spec.Text then u.Mode = Enum.ApplyShadowMode.Text end
+        if spec.Inset then u.Inset = true end
+        u.Parent = parent
+        return u
+    end)
+    if ok and s then
+        if not spec.NoReg then shadows[#shadows + 1] = { s, spec } end
+        return s
+    end
+end
+
+local function refreshShadows()
+    for i = #shadows, 1, -1 do
+        local e = shadows[i]
+        local s, spec = e[1], e[2]
+        if s.Parent then
+            s.Enabled = ShadowState.On
+            s.Transparency = shadowT(spec.T or 0.5)
+            if spec.Tone then s.Color = toneColor(spec.Tone) end
+        else
+            table.remove(shadows, i)
+        end
+    end
 end
 
 local function applyTheme(def, instant)
@@ -123,9 +210,13 @@ local function applyTheme(def, instant)
         local g = grads[i]
         if g[1].Parent then g[1].Color = gradColor(g[2]) else table.remove(grads, i) end
     end
+    refreshShadows()
     for _, f in ipairs(hooks) do pcall(f, instant == true) end
 end
 
+--══════════════════════════════════════════════════════════════
+--  Конструкторы UI
+--══════════════════════════════════════════════════════════════
 local function new(class, props, kids)
     local o = Instance.new(class)
     if o:IsA("GuiObject") then o.BorderSizePixel = 0 end
@@ -134,13 +225,15 @@ local function new(class, props, kids)
         o.Font = Enum.Font.GothamMedium
     end
     if o:IsA("TextButton") then o.AutoButtonColor = false o.Text = "" end
-    local parent
+    local parent, sh
     for k, v in pairs(props or {}) do
         if k == "Parent" then parent = v
+        elseif k == "Shadow" then sh = v
         elseif type(v) == "table" and v.__bind then bind(o, k, v.__bind)
         else o[k] = v end
     end
     for _, c in ipairs(kids or {}) do c.Parent = o end
+    if sh then addShadow(o, sh) end
     if parent then o.Parent = parent end
     return o
 end
@@ -175,7 +268,7 @@ local function fire(cb, ...)
     local a = table.pack(...)
     task.spawn(function()
         local ok, err = pcall(cb, table.unpack(a, 1, a.n))
-        if not ok then warn("[Femboysense] " .. tostring(err)) end
+        if not ok then warn("[Zenith] " .. tostring(err)) end
     end)
 end
 local function isPress(i) return i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch end
@@ -197,15 +290,18 @@ local function parseHex(s)
     return rgb(n // 65536, (n // 256) % 256, n % 256)
 end
 
+-- единый «захват» мыши для драга (слайдеры, окна, пикеры)
 local active
 local function capture(onMove, onEnd) active = { move = onMove, stop = onEnd } end
-local function drag(handle, target, gate)
+local function drag(handle, target, gate, clampFn)
     handle.InputBegan:Connect(function(i)
         if not isPress(i) or (gate and gate()) then return end
         local start, sp = i.Position, target.Position
         capture(function(p)
             local d = p - start
-            target.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+            local x, y = sp.X.Offset + d.X, sp.Y.Offset + d.Y
+            if clampFn then x, y = clampFn(x, y) end
+            target.Position = UDim2.new(sp.X.Scale, x, sp.Y.Scale, y)
         end)
     end)
 end
@@ -232,6 +328,9 @@ local function makeIcon(parent, icon, pos, px)
     return ic
 end
 
+--══════════════════════════════════════════════════════════════
+--  Клавиши
+--══════════════════════════════════════════════════════════════
 local SHORT = { RightShift = "RSHIFT", LeftShift = "LSHIFT", RightControl = "RCTRL", LeftControl = "LCTRL",
     RightAlt = "RALT", LeftAlt = "LALT", Return = "ENTER", Backspace = "BKSP", Escape = "ESC",
     Space = "SPACE", Insert = "INS", Delete = "DEL", PageUp = "PGUP", PageDown = "PGDN", CapsLock = "CAPS" }
@@ -258,9 +357,12 @@ local function keyMatch(key, input)
     return key == input.KeyCode or key == input.UserInputType
 end
 
+--══════════════════════════════════════════════════════════════
+--  Базовые контролы
+--══════════════════════════════════════════════════════════════
 local function resetBtn(parent, pos, onClick)
     local b = new("TextButton", { Parent = parent, AnchorPoint = V2(1, 0.5), Position = pos, Size = UDim2.fromOffset(24, 24),
-        BackgroundColor3 = B"Panel2", Visible = false }, { corner(8) })
+        BackgroundColor3 = B"Panel2", Visible = false, Shadow = SH.Tiny }, { corner(8) })
     local ic = makeIcon(b, Lib.ResetIcon, UDim2.fromOffset(5, 5), 14):Bind("Sub")
     b.MouseEnter:Connect(function() ic:Paint(Theme.Accent) end)
     b.MouseLeave:Connect(function() ic:Paint(Theme.Sub) end)
@@ -271,10 +373,10 @@ end
 local function makeSwitch(parent, init, cb, pos)
     local state = init and true or false
     local trackBtn = new("TextButton", { Parent = parent, AnchorPoint = V2(1, 0.5), Position = pos or UDim2.new(1, 0, 0.5, 0),
-        Size = UDim2.fromOffset(40, 22), BackgroundColor3 = Theme.Bg }, { corner(11) })
+        Size = UDim2.fromOffset(40, 22), BackgroundColor3 = Theme.Bg, Shadow = SH.Tiny }, { corner(11) })
     local press = new("UIScale", { Parent = trackBtn })
     local knob = new("Frame", { Parent = trackBtn, AnchorPoint = V2(0, 0.5), Position = UDim2.new(0, 3, 0.5, 0),
-        Size = UDim2.fromOffset(16, 16), BackgroundColor3 = WHITE }, { corner(8) })
+        Size = UDim2.fromOffset(16, 16), BackgroundColor3 = WHITE, Shadow = SH.Tiny }, { corner(8) })
     local sw = {}
     local function paint(instant)
         local col = state and Theme.Accent:Lerp(Theme.Panel2, 0.38) or Theme.Bg
@@ -306,16 +408,19 @@ end
 
 local function makeSlider(parent, o)
     local mn, mx, step = o.Min or 0, o.Max or 100, o.Step or 1
-    local value = clamp(o.Default or mn, mn, mx)
+    local def = clamp(o.Default or mn, mn, mx)
+    local value = def
+    local api = {}
     local f = new("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, LayoutOrder = o.Order or 0 })
-    label(f, o.Name or "Slider", UDim2.new(), UDim2.new(1, -70, 0, 18), Enum.Font.GothamMedium, 13, B"Text")
+    label(f, o.Name or "Slider", UDim2.new(), UDim2.new(1, -110, 0, 18), Enum.Font.GothamMedium, 13, B"Text")
     local out = label(f, "", UDim2.new(1, 0, 0, 0), UDim2.fromOffset(70, 18), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right)
     out.AnchorPoint = V2(1, 0)
+    local rb = resetBtn(f, UDim2.new(1, -76, 0, 9), function() api:Set(def) end)
     local bar = new("Frame", { Parent = f, Position = UDim2.new(0, 0, 0, 29), Size = UDim2.new(1, 0, 0, 4), BackgroundColor3 = B"Bg" }, { corner(2) })
     local fill = new("Frame", { Parent = bar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE }, { corner(2) })
     grad(fill, "lin")
     local knob = new("Frame", { Parent = bar, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0, 0.5),
-        Size = UDim2.fromOffset(12, 12), BackgroundColor3 = WHITE, ZIndex = 2 }, { corner(6) })
+        Size = UDim2.fromOffset(12, 12), BackgroundColor3 = WHITE, ZIndex = 2, Shadow = SH.Glow }, { corner(6) })
     local function fmt(v)
         if step >= 1 then return string.format("%d", v) end
         local s = string.format(step < 0.1 and "%.3f" or "%.2f", v):gsub("0+$", ""):gsub("%.$", "")
@@ -324,10 +429,10 @@ local function makeSlider(parent, o)
     local function render(fast)
         local r = (value - mn) / (mx - mn)
         out.Text = fmt(value) .. (o.Suffix or "")
+        rb.Visible = value ~= def
         tw(fill, fast and 0.06 or 0.3, { Size = UDim2.fromScale(r, 1) }, SINE)
         tw(knob, fast and 0.06 or 0.3, { Position = UDim2.fromScale(r, 0.5) }, SINE)
     end
-    local api = {}
     local function setv(v, silent, fast)
         v = clamp(floor((v - mn) / step + 0.5) * step + mn, mn, mx)
         if v == value then return end
@@ -348,6 +453,7 @@ local function makeSlider(parent, o)
     end)
     function api:Set(v, silent) setv(v, silent, false) end
     function api:Get() return value end
+    api.Reset = function() setv(def, false, false) end
     api.Frame = f
     return api
 end
@@ -360,24 +466,147 @@ local function place(f, name, topMargin)
     f.Position = UDim2.new(r and 1 or 0, r and -18 or 18, b and 1 or 0, b and -18 or topMargin)
 end
 
+--══════════════════════════════════════════════════════════════
+--  ESP Preview (аватар игрока + как выглядит ESP)
+--══════════════════════════════════════════════════════════════
+local ESP_W, ESP_H = 340, 330
+local ESP = { List = {}, AvatarId = LocalPlayer.UserId, State = {
+    Box = true, BoxStyle = "Full", BoxColor = WHITE, BoxFill = false, BoxFillColor = rgb(255, 255, 255), BoxFillTransparency = 0.82,
+    Name = true, NameColor = WHITE,
+    Health = true, HealthValue = 0.78,
+    Distance = true, DistanceColor = rgb(200, 200, 205), DistanceText = "[42m]",
+    Weapon = false, WeaponColor = rgb(255, 210, 120), WeaponText = "AK-47",
+    Tracer = false, TracerColor = rgb(255, 255, 255),
+    Chams = false, ChamsColor = rgb(255, 70, 110), ChamsTransparency = 0.55,
+} }
+local function thumb(id) return "rbxthumb://type=Avatar&id=" .. tostring(id) .. "&w=420&h=420" end
+
+local function newESPStage(parent, pos)
+    local P = {}
+    local IMG, IX, IY = 250, 93, 40
+    local BX, BY, BW, BH = IX + IMG * 0.30, IY + IMG * 0.065, IMG * 0.40, IMG * 0.87
+    local CX = BX + BW / 2
+
+    local stage = new("Frame", { Parent = parent, AnchorPoint = V2(0.5, 0), Position = pos, Size = UDim2.fromOffset(ESP_W, ESP_H),
+        BackgroundColor3 = B"Bg", ClipsDescendants = true, Shadow = SH.Small }, { corner(14), stk() })
+    P.Stage = stage
+
+    label(stage, "TARGET", UDim2.fromOffset(14, 12), UDim2.fromOffset(120, 12), Enum.Font.GothamBold, 9, B"Sub")
+    label(stage, LocalPlayer.DisplayName, UDim2.fromOffset(14, 25), UDim2.fromOffset(140, 18), Enum.Font.GothamBold, 14, B"Text")
+
+    new("Frame", { Parent = stage, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromOffset(CX, BY + BH), Size = UDim2.fromOffset(150, 18),
+        BackgroundColor3 = BLACK, BackgroundTransparency = 0.55 }, { new("UICorner", { CornerRadius = UDim.new(0.5, 0) }) })
+
+    local avatar = new("ImageLabel", { Parent = stage, Position = UDim2.fromOffset(IX, IY), Size = UDim2.fromOffset(IMG, IMG),
+        BackgroundTransparency = 1, Image = thumb(ESP.AvatarId), ScaleType = Enum.ScaleType.Fit, ZIndex = 2 })
+    local chams = new("ImageLabel", { Parent = stage, Position = avatar.Position, Size = avatar.Size, BackgroundTransparency = 1,
+        Image = avatar.Image, ScaleType = Enum.ScaleType.Fit, ZIndex = 3, Visible = false })
+
+    local tracer = new("Frame", { Parent = stage, AnchorPoint = V2(0, 0.5), BackgroundColor3 = WHITE, ZIndex = 4, Visible = false })
+    do
+        local sx, sy, ex, ey = ESP_W / 2, ESP_H, CX, BY + BH
+        tracer.Position = UDim2.fromOffset(sx, sy)
+        tracer.Size = UDim2.fromOffset(math.sqrt((ex - sx) ^ 2 + (ey - sy) ^ 2), 1.5)
+        tracer.Rotation = math.deg(math.atan2(ey - sy, ex - sx))
+    end
+
+    local box = new("Frame", { Parent = stage, Position = UDim2.fromOffset(BX, BY), Size = UDim2.fromOffset(BW, BH),
+        BackgroundColor3 = WHITE, BackgroundTransparency = 1, ZIndex = 5 })
+    local boxStroke = new("UIStroke", { Parent = box, Thickness = 1.5, Color = WHITE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local corners = new("Frame", { Parent = stage, Position = box.Position, Size = box.Size, BackgroundTransparency = 1, ZIndex = 5, Visible = false })
+    local cornerLines = {}
+    for cx = 0, 1 do
+        for cy = 0, 1 do
+            for _, sz in ipairs({ UDim2.fromOffset(24, 2), UDim2.fromOffset(2, 38) }) do
+                cornerLines[#cornerLines + 1] = new("Frame", { Parent = corners, AnchorPoint = V2(cx, cy), Position = UDim2.fromScale(cx, cy),
+                    Size = sz, BackgroundColor3 = WHITE })
+            end
+        end
+    end
+
+    local hb = new("Frame", { Parent = stage, Position = UDim2.fromOffset(BX - 8, BY), Size = UDim2.fromOffset(4, BH),
+        BackgroundColor3 = BLACK, BackgroundTransparency = 0.3, ZIndex = 5 }, { corner(2) })
+    local hf = new("Frame", { Parent = hb, AnchorPoint = V2(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.fromScale(1, 0.8),
+        BackgroundColor3 = Lib.Semantic.Green, ZIndex = 6 }, { corner(2) })
+
+    local function txt(y, size, font)
+        local l = label(stage, "", UDim2.fromOffset(CX - 80, y), UDim2.fromOffset(160, 14), font or Enum.Font.GothamBold, size, WHITE, CENTER,
+            { ZIndex = 6, TextTruncate = Enum.TextTruncate.None })
+        addShadow(l, SH.Text)
+        return l
+    end
+    local nameL = txt(BY - 18, 12)
+    nameL.Text = LocalPlayer.DisplayName
+    local distL = txt(BY + BH + 3, 11, Enum.Font.GothamMedium)
+    local weapL = txt(BY + BH + 17, 11, Enum.Font.GothamMedium)
+
+    function P:Apply()
+        local s = ESP.State
+        box.Visible = s.Box and s.BoxStyle ~= "Corner"
+        boxStroke.Color = s.BoxColor
+        box.BackgroundColor3 = s.BoxFillColor
+        box.BackgroundTransparency = (s.Box and s.BoxFill) and s.BoxFillTransparency or 1
+        corners.Visible = s.Box and s.BoxStyle == "Corner"
+        for _, l in ipairs(cornerLines) do l.BackgroundColor3 = s.BoxColor end
+        if s.Box and s.BoxFill and s.BoxStyle == "Corner" then
+            box.Visible = true
+            boxStroke.Enabled = false
+        else
+            boxStroke.Enabled = true
+        end
+        nameL.Visible, nameL.TextColor3 = s.Name, s.NameColor
+        hb.Visible = s.Health
+        local hp = clamp(s.HealthValue, 0, 1)
+        tw(hf, 0.25, { Size = UDim2.fromScale(1, math.max(hp, 0.02)), BackgroundColor3 = Lib.Semantic.Red:Lerp(Lib.Semantic.Green, hp) }, SINE)
+        distL.Visible, distL.TextColor3, distL.Text = s.Distance, s.DistanceColor, s.DistanceText
+        weapL.Visible, weapL.TextColor3, weapL.Text = s.Weapon, s.WeaponColor, s.WeaponText
+        tracer.Visible, tracer.BackgroundColor3 = s.Tracer, s.TracerColor
+        chams.Visible, chams.ImageColor3, chams.ImageTransparency = s.Chams, s.ChamsColor, s.ChamsTransparency
+    end
+    function P:SetAvatar(id)
+        avatar.Image = thumb(id)
+        chams.Image = avatar.Image
+    end
+    ESP.List[#ESP.List + 1] = P
+    P:Apply()
+    return P
+end
+
+local function buildPreviewCard(parent, title)
+    local card = new("Frame", { Parent = parent, Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = B"Panel", Shadow = SH.Card }, { corner(16), stk() })
+    label(card, title or "ESP Preview", UDim2.fromOffset(16, 10), UDim2.new(1, -60, 0, 18), Enum.Font.GothamBold, 14, B"Text")
+    label(card, "Live preview of your ESP on your avatar", UDim2.fromOffset(16, 28), UDim2.new(1, -60, 0, 14), Enum.Font.Gotham, 11, B"Sub")
+    local P = newESPStage(card, UDim2.new(0.5, 0, 0, 52))
+    P.Card = card
+    return P
+end
+
+--══════════════════════════════════════════════════════════════
+--  Окно
+--══════════════════════════════════════════════════════════════
 function Lib:CreateWindow(cfg)
     cfg = cfg or {}
     local Icons = cfg.Icons or {}
     if Icons.Reset then Lib.ResetIcon = Icons.Reset end
     local W, H = 880, 580
     local TBW = W - 238
+    local MARGIN = 70 -- запас под тени вокруг окна (клип схлопывания)
+    local FULL = UDim2.fromOffset(W + MARGIN * 2, H + MARGIN * 2)
+    local SHUT = UDim2.fromOffset(W + MARGIN * 2, 0)
+    local LOGO = cfg.Logo or Lib.LogoId
+
     local Win = {
         Categories = {}, Groups = {}, Modules = {}, BindList = {}, Current = nil, Query = "",
-        userScale = 1, Open = true, ToggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift,
-        ThemeDef = THEMES[2], Opacity = 1, LockPos = false, FolderName = cfg.Folder or "FemboysenseHub",
+        userScale = 1, Open = false, ToggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift,
+        ThemeDef = DEFAULT_THEME, Opacity = 1, LockPos = false, FolderName = cfg.Folder or "ZenithHub",
         NotifTime = 3, NotifsOn = true, FreeMouse = true, BorderSpin = 60, BorderPulse = false,
-        BorderThick = 2, _glowT = 0.45, HudOn = false, Loading = false,
+        BorderThick = 2, _glowT = 0.45, Loading = false,
     }
     Lib.Win = Win
     local SEM = Lib.Semantic
     Win.Keep = keep
 
-    local gui = new("ScreenGui", { Name = "FemboysenseHub", ResetOnSpawn = false, IgnoreGuiInset = true,
+    local gui = new("ScreenGui", { Name = "ZenithHub", ResetOnSpawn = false, IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 9999, AutoLocalize = false, Parent = guiParent() })
     Win.Gui = gui
     Lib._gui = gui
@@ -395,9 +624,18 @@ function Lib:CreateWindow(cfg)
     local stash = Instance.new("Folder")
     stash.Name = "Stash"
 
+    ----------------------------------------------------------------
+    --  Корень: root (драг) → clip (схлопывание) → main
+    ----------------------------------------------------------------
     local root = new("Frame", { Parent = gui, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ZIndex = 2 })
+        Size = UDim2.fromOffset(W, H), BackgroundTransparency = 1, ZIndex = 2, Visible = false })
     local scale = new("UIScale", { Parent = root })
+    local clip = new("Frame", { Parent = root, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        Size = SHUT, BackgroundTransparency = 1, ClipsDescendants = true })
+    local main = new("Frame", { Parent = clip, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(W, H), BackgroundColor3 = B"Bg", Shadow = SH.Window }, { corner(22) })
+    local line = new("Frame", { Parent = root, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(0, 2),
+        BackgroundColor3 = B"Accent", ZIndex = 9, Visible = false, Shadow = SH.Glow }, { corner(1) })
 
     local vpSize = V2(1280, 720)
     local function readViewport()
@@ -408,12 +646,17 @@ function Lib:CreateWindow(cfg)
     local function fit()
         return clamp(math.min(vpSize.X / (W + 40), vpSize.Y / (H + 40)), 0.4, 1.3) * Win.userScale
     end
+    local function clampRoot(x, y)
+        local mx, my = vpSize.X / 2 - 90, vpSize.Y / 2 - 50
+        return clamp(x, -mx, mx), clamp(y, -my, my)
+    end
+    scale.Scale = fit()
     do
         local cam = workspace.CurrentCamera
         if cam then
             keep(cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
                 readViewport()
-                if Win.Open then scale.Scale = fit() end
+                scale.Scale = fit()
             end))
         end
     end
@@ -426,53 +669,148 @@ function Lib:CreateWindow(cfg)
         obj.BackgroundTransparency = glassFinal(g)
     end
 
-    local main = new("Frame", { Parent = root, Size = UDim2.fromScale(1, 1), BackgroundColor3 = B"Bg", ClipsDescendants = true }, { corner(22) })
     glassT(main, 0.04)
     local mainStroke = new("UIStroke", { Color = WHITE, Transparency = Win._glowT, Thickness = Win.BorderThick,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = main })
     local ringGrad = grad(mainStroke, "ring")
-    main.MouseEnter:Connect(function() Win.OverMenu = true end)
-    main.MouseLeave:Connect(function() Win.OverMenu = false end)
 
-    local side = new("Frame", { Parent = main, Position = UDim2.fromOffset(14, 14), Size = UDim2.new(0, 196, 1, -28), BackgroundColor3 = B"Side" }, { corner(18), stk() })
-    glassT(side, 0.08)
-    local brand = new("Frame", { Parent = side, Size = UDim2.new(1, 0, 0, 74), BackgroundTransparency = 1 })
-    local logoHolder = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = WHITE }, { corner(11) })
-    if cfg.Logo then
-        new("ImageLabel", { Parent = logoHolder, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-            Image = type(cfg.Logo) == "number" and ("rbxassetid://" .. cfg.Logo) or cfg.Logo, ScaleType = Enum.ScaleType.Fit })
-        logoHolder.BackgroundTransparency = 1
-    else
-        grad(logoHolder, "pill", 45)
-        label(logoHolder, string.sub(cfg.Title or "F", 1, 1), nil, nil, Enum.Font.GothamBlack, 20, B"OnAccent", Enum.TextXAlignment.Center)
+    ----------------------------------------------------------------
+    --  Фон: узор из треугольников + глоу-круги
+    ----------------------------------------------------------------
+    local PAT = { On = true, Style = "Mixed", Count = 24, Opacity = 1, Speed = 1, Glow = true, GlowAmt = 1 }
+    Win.Pat = PAT
+    local PW, PH = W - 8, H - 8
+    local rng = Random.new(os.time() + floor(os.clock() * 1000))
+    local patLayer = new("Frame", { Parent = main, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(PW, PH),
+        BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 0 })
+    local TRI_SEQ = NumberSequence.new({ nk(0, 0), nk(0.499, 0), nk(0.5, 1), nk(1, 1) })
+    local tris, orbs = {}, {}
+    local patT, rebuildTok = 0, 0
+
+    local function triAlpha(p) return clamp(1 - (1 - p.alpha) * PAT.Opacity, 0, 1) end
+    local function randomizeTri(p, jump)
+        p.tx, p.ty = rng:NextNumber(0, PW), rng:NextNumber(0, PH)
+        p.r0 = rng:NextNumber(0, 360)
+        p.rs = rng:NextNumber(-9, 9)
+        if jump then p.bx, p.by = p.tx, p.ty end
     end
-    label(brand, cfg.Title or "FEMBOYSENSE", UDim2.fromOffset(62, 19), UDim2.new(1, -68, 0, 20), Enum.Font.GothamBlack, 15, B"Text")
-    label(brand, cfg.Sub or "HUB", UDim2.fromOffset(62, 40), UDim2.new(1, -68, 0, 12), Enum.Font.GothamMedium, 9, B"Sub")
+    local function buildTris()
+        for _, p in ipairs(tris) do p.f:Destroy() end
+        tris = {}
+        for _ = 1, PAT.Count do
+            local diamond = PAT.Style == "Diamonds" or (PAT.Style == "Mixed" and rng:NextNumber() < 0.28)
+            local size = rng:NextInteger(40, 140)
+            local f = new("Frame", { Parent = patLayer, AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(size, size), BackgroundColor3 = WHITE })
+            local g = new("UIGradient", { Parent = f, Color = gradColor("lin"), Rotation = 45 })
+            if not diamond then g.Transparency = TRI_SEQ end
+            grads[#grads + 1] = { g, "lin" }
+            local p = { f = f, alpha = rng:NextNumber(0.84, 0.94), ax = rng:NextNumber(6, 22), ay = rng:NextNumber(6, 22),
+                sp = rng:NextNumber(0.15, 0.5), ph = rng:NextNumber(0, 6.28) }
+            randomizeTri(p, true)
+            f.BackgroundTransparency = triAlpha(p)
+            tris[#tris + 1] = p
+        end
+        patLayer.Visible = PAT.On
+    end
+
+    local ORB_DEF = { { 0.12, 0.18, 320, "Accent" }, { 0.88, 0.78, 360, "Accent2" }, { 0.5, 1.0, 280, "Accent" }, { 0.95, 0.05, 240, "Accent2" } }
+    for i, d in ipairs(ORB_DEF) do
+        local f = new("Frame", { Parent = patLayer, AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(d[3], d[3]),
+            BackgroundColor3 = toneColor(d[4]), BackgroundTransparency = 0.9, Visible = HAS_SHADOW }, { new("UICorner", { CornerRadius = UDim.new(0.5, 0) }) })
+        local sh = addShadow(f, { Blur = 90, Spread = 26, Y = 0, T = 0.5, Behind = true, NoReg = true, Tone = d[4] })
+        orbs[i] = { f = f, sh = sh, fx = d[1], fy = d[2], tone = d[4], ph = i * 1.7, sp = 0.12 + i * 0.03, a = 30 + i * 12 }
+    end
+    local function applyPattern()
+        patLayer.Visible = PAT.On or PAT.Glow
+        for _, p in ipairs(tris) do p.f.Visible = PAT.On p.f.BackgroundTransparency = triAlpha(p) end
+        local ga = clamp(PAT.GlowAmt, 0, 2)
+        for _, o in ipairs(orbs) do
+            o.f.Visible = PAT.Glow and HAS_SHADOW
+            o.f.BackgroundTransparency = clamp(1 - 0.11 * ga, 0.5, 1)
+            if o.sh then o.sh.Transparency = clamp(1 - 0.5 * ga, 0, 1) end
+        end
+    end
+    onTheme(function()
+        for _, o in ipairs(orbs) do
+            o.f.BackgroundColor3 = toneColor(o.tone)
+            if o.sh then o.sh.Color = toneColor(o.tone) end
+        end
+    end)
+    buildTris()
+    applyPattern()
+    local function stepPattern(d)
+        patT += d * PAT.Speed
+        local k = math.min(1, d * 2.5)
+        if PAT.On then
+            for _, p in ipairs(tris) do
+                p.bx += (p.tx - p.bx) * k
+                p.by += (p.ty - p.by) * k
+                local ph = patT * p.sp + p.ph
+                p.f.Position = UDim2.fromOffset(p.bx + sin(ph) * p.ax, p.by + cos(ph * 0.83) * p.ay)
+                p.f.Rotation = (p.r0 + patT * p.rs) % 360
+            end
+        end
+        if PAT.Glow then
+            for _, o in ipairs(orbs) do
+                local ph = patT * o.sp + o.ph
+                o.f.Position = UDim2.fromOffset(PW * o.fx + sin(ph) * o.a, PH * o.fy + cos(ph * 0.9) * o.a)
+            end
+        end
+    end
+    function Win:RegeneratePattern()
+        for _, p in ipairs(tris) do randomizeTri(p, false) end
+    end
+    function Win:SetPattern(k, v)
+        PAT[k] = v
+        if k == "Count" or k == "Style" then
+            rebuildTok += 1
+            local my = rebuildTok
+            task.delay(0.2, function() if my == rebuildTok then buildTris() applyPattern() end end)
+        else
+            applyPattern()
+        end
+    end
+
+    ----------------------------------------------------------------
+    --  Сайдбар
+    ----------------------------------------------------------------
+    local side = new("Frame", { Parent = main, Position = UDim2.fromOffset(14, 14), Size = UDim2.new(0, 196, 1, -28), BackgroundColor3 = B"Side", Shadow = SH.Panel }, { corner(18), stk() })
+    glassT(side, 0.22)
+    local brand = new("Frame", { Parent = side, Size = UDim2.new(1, 0, 0, 74), BackgroundTransparency = 1 })
+    new("ImageLabel", { Parent = brand, Position = UDim2.fromOffset(14, 17), Size = UDim2.fromOffset(40, 40), BackgroundTransparency = 1,
+        Image = type(LOGO) == "number" and ("rbxassetid://" .. LOGO) or LOGO, ScaleType = Enum.ScaleType.Fit })
+    local brandT = label(brand, cfg.Title or "ZENITH", UDim2.fromOffset(62, 19), UDim2.new(1, -68, 0, 20), Enum.Font.GothamBlack, 16, B"Text")
+    label(brand, cfg.Sub or "your best hub", UDim2.fromOffset(62, 40), UDim2.new(1, -68, 0, 12), Enum.Font.GothamMedium, 10, B"Sub")
+    addShadow(brandT, SH.Text)
 
     local NAV_STEP, HEAD_H, GAP = 44, 26, 8
     local nav = new("ScrollingFrame", { Parent = side, Position = UDim2.fromOffset(10, 78), Size = UDim2.new(1, -20, 1, -78 - 80),
         BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), ClipsDescendants = true })
-    local navInd = new("Frame", { Parent = nav, Size = UDim2.new(1, -4, 0, 40), BackgroundColor3 = B"Panel2", Visible = false, ZIndex = 1 }, {
+    local navInd = new("Frame", { Parent = nav, Size = UDim2.new(1, -4, 0, 40), BackgroundColor3 = B"Panel2", Visible = false, ZIndex = 1, Shadow = SH.Small }, {
         corner(12), new("UIGradient", { Transparency = NumberSequence.new({ nk(0, 0), nk(1, 0.65) }) }), stk() })
     local navBar = new("Frame", { Parent = navInd, Position = UDim2.fromOffset(0, 11), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = WHITE }, { corner(2) })
     grad(navBar, "lin", 90)
 
     local account = new("TextButton", { Parent = side, AnchorPoint = V2(0, 1), Position = UDim2.new(0, 12, 1, -12),
-        Size = UDim2.new(1, -24, 0, 58), BackgroundColor3 = B"Panel" }, { corner(14), stk() })
+        Size = UDim2.new(1, -24, 0, 58), BackgroundColor3 = B"Panel", Shadow = SH.Card }, { corner(14), stk() })
     new("ImageLabel", { Parent = account, Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = B"Panel2",
         Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=100&h=100" }, { corner(17) })
     label(account, LocalPlayer.DisplayName, UDim2.fromOffset(54, 12), UDim2.new(1, -86, 0, 18), Enum.Font.GothamBold, 13, B"Text")
     label(account, cfg.Version or Lib.Version, UDim2.fromOffset(54, 30), UDim2.new(1, -86, 0, 14), Enum.Font.Gotham, 10, B"Sub")
-    local accArrow = label(account, ">", UDim2.new(1, -24, 0, 0), UDim2.fromOffset(14, 58), Enum.Font.GothamBold, 13, B"Sub", Enum.TextXAlignment.Center)
+    local accArrow = label(account, ">", UDim2.new(1, -24, 0, 0), UDim2.fromOffset(14, 58), Enum.Font.GothamBold, 13, B"Sub", CENTER)
     account.MouseEnter:Connect(function() tw(account, 0.25, { BackgroundColor3 = Theme.Panel2 }, SINE) tw(accArrow, 0.3, { Position = UDim2.new(1, -20, 0, 0) }, QUINT) end)
     account.MouseLeave:Connect(function() tw(account, 0.3, { BackgroundColor3 = Theme.Panel }, SINE) tw(accArrow, 0.3, { Position = UDim2.new(1, -24, 0, 0) }, QUINT) end)
 
-    local toolbar = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 14), Size = UDim2.fromOffset(TBW, 52), BackgroundColor3 = B"Panel" }, { corner(16), stk() })
-    glassT(toolbar, 0.08)
+    ----------------------------------------------------------------
+    --  Тулбар
+    ----------------------------------------------------------------
+    local toolbar = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 14), Size = UDim2.fromOffset(TBW, 52), BackgroundColor3 = B"Panel", Shadow = SH.Panel }, { corner(16), stk() })
+    glassT(toolbar, 0.22)
 
     local function tbBtn(rightOff, text, size)
         local b = new("TextButton", { Parent = toolbar, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -rightOff, 0.5, 0),
-            Size = UDim2.fromOffset(36, 36), BackgroundColor3 = B"Bg", Text = text, TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = size or 13 }, { corner(11) })
+            Size = UDim2.fromOffset(36, 36), BackgroundColor3 = B"Bg", Text = text, TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = size or 13,
+            Shadow = SH.Small }, { corner(11) })
         local sc = new("UIScale", { Parent = b })
         b.MouseEnter:Connect(function() tw(b, 0.2, { BackgroundColor3 = Theme.Panel2 }, SINE) tw(sc, 0.3, { Scale = 1.08 }, BACK) end)
         b.MouseLeave:Connect(function() tw(b, 0.25, { BackgroundColor3 = Theme.Bg }, SINE) tw(sc, 0.25, { Scale = 1 }, SINE) end)
@@ -483,11 +821,13 @@ function Lib:CreateWindow(cfg)
     local closeBtn = tbBtn(9, "×", 20)
     local hideBtn = tbBtn(53, "–", 18)
     local gearBtn = tbBtn(97, "", 13)
+    local espBtn = tbBtn(141, "", 10)
     if Icons.Settings then makeIcon(gearBtn, Icons.Settings, UDim2.fromOffset(9, 9), 18):Bind("Text") else gearBtn.Text = "⚙" end
+    if Icons.Preview then makeIcon(espBtn, Icons.Preview, UDim2.fromOffset(9, 9), 18):Bind("Text") else espBtn.Text = "ESP" end
     closeBtn.MouseEnter:Connect(function() tw(closeBtn, 0.2, { BackgroundColor3 = rgb(220, 70, 80), TextColor3 = WHITE }, SINE) end)
     closeBtn.MouseLeave:Connect(function() tw(closeBtn, 0.25, { BackgroundColor3 = Theme.Bg, TextColor3 = Theme.Text }, SINE) end)
 
-    local searchBack = new("Frame", { Parent = toolbar, Position = UDim2.fromOffset(9, 7), Size = UDim2.new(1, -150, 0, 38), BackgroundColor3 = B"Bg" }, { corner(12) })
+    local searchBack = new("Frame", { Parent = toolbar, Position = UDim2.fromOffset(9, 7), Size = UDim2.new(1, -194, 0, 38), BackgroundColor3 = B"Bg", Shadow = SH.Tiny }, { corner(12) })
     local searchStroke = new("UIStroke", { Color = B"Accent", Transparency = 1, Thickness = 1.2, Parent = searchBack })
     local searchIcon = makeIcon(searchBack, Icons.Search or 118685771787843, UDim2.fromOffset(12, 10), 18):Bind("Sub")
     local searchBox = new("TextBox", { Parent = searchBack, Position = UDim2.fromOffset(38, 0), Size = UDim2.new(1, -48, 1, 0), BackgroundTransparency = 1,
@@ -496,16 +836,21 @@ function Lib:CreateWindow(cfg)
     searchBox.FocusLost:Connect(function() tw(searchStroke, 0.3, { Transparency = 1 }, SINE) searchIcon:Paint(Theme.Sub) end)
 
     local function canDrag() return Win.LockPos end
-    drag(toolbar, root, canDrag)
-    drag(brand, root, canDrag)
+    drag(toolbar, root, canDrag, clampRoot)
+    drag(brand, root, canDrag, clampRoot)
 
-    local content = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 80), Size = UDim2.fromOffset(TBW, H - 80 - 38), BackgroundColor3 = B"Bg", ClipsDescendants = true }, { corner(18), stk() })
-    glassT(content, 0.02)
+    ----------------------------------------------------------------
+    --  Контент
+    ----------------------------------------------------------------
+    local content = new("Frame", { Parent = main, Position = UDim2.fromOffset(224, 80), Size = UDim2.fromOffset(TBW, H - 80 - 38), BackgroundColor3 = B"Bg",
+        ClipsDescendants = true, Shadow = SH.Panel }, { corner(18), stk() })
+    glassT(content, 0.14)
     local pageTitle = label(content, "", UDim2.fromOffset(22, 14), UDim2.new(1, -44, 0, 32), Enum.Font.GothamBold, 26, B"Text")
     local pageSub = label(content, "", UDim2.fromOffset(22, 48), UDim2.new(1, -44, 0, 16), Enum.Font.Gotham, 12, B"Sub")
+    addShadow(pageTitle, SH.Text)
     local titleBar = new("Frame", { Parent = content, Position = UDim2.fromOffset(22, 68), Size = UDim2.fromOffset(38, 2), BackgroundColor3 = WHITE }, { corner(1) })
     grad(titleBar, "lin")
-    drag(pageTitle, root, canDrag)
+    drag(pageTitle, root, canDrag, clampRoot)
 
     local SCROLL_X = 4
     local scroll = new("ScrollingFrame", { Parent = content, Position = UDim2.fromOffset(SCROLL_X, 80), Size = UDim2.new(1, -SCROLL_X * 2, 1, -92), BackgroundTransparency = 1,
@@ -520,7 +865,7 @@ function Lib:CreateWindow(cfg)
             { new("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }) })
     end
     local colL, colR = mkCol(1), mkCol(2)
-    local emptyL = label(content, "Nothing found.", UDim2.fromOffset(0, 220), UDim2.new(1, 0, 0, 20), Enum.Font.GothamMedium, 13, B"Sub", Enum.TextXAlignment.Center)
+    local emptyL = label(content, "Nothing found.", UDim2.fromOffset(0, 220), UDim2.new(1, 0, 0, 20), Enum.Font.GothamMedium, 13, B"Sub", CENTER)
     emptyL.Visible = false
 
     local footerL = label(main, "", UDim2.fromOffset(238, H - 30), UDim2.fromOffset(420, 14), Enum.Font.GothamMedium, 10, B"Sub")
@@ -528,15 +873,22 @@ function Lib:CreateWindow(cfg)
     local function setFooter() footerL.Text = keyName(Win.ToggleKey) .. " · HIDE   /   RMB · SETTINGS" end
     setFooter()
 
+    ----------------------------------------------------------------
+    --  Тултип
+    ----------------------------------------------------------------
     local tip = new("TextLabel", { Parent = gui, Size = UDim2.new(0, 0, 0, 24), AutomaticSize = AUTO_X, BackgroundColor3 = B"Panel2",
-        Text = "", TextColor3 = B"Text", TextSize = 11, Visible = false, ZIndex = 200 }, { corner(8), stk(), pad(0, 0, 10, 10) })
+        Text = "", TextColor3 = B"Text", TextSize = 11, Visible = false, ZIndex = 200, Shadow = SH.Small }, { corner(8), stk(), pad(0, 0, 10, 10) })
     local function showTip(text, obj)
         if not text or text == "" then return end
         tip.Text = text
         tip.Position = UDim2.fromOffset(obj.AbsolutePosition.X, obj.AbsolutePosition.Y - 32)
         tip.Visible = true
     end
+    scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() tip.Visible = false end)
 
+    ----------------------------------------------------------------
+    --  Уведомления
+    ----------------------------------------------------------------
     local nholder = new("Frame", { Parent = gui, AnchorPoint = V2(1, 0), Position = UDim2.new(1, -16, 0, 16), Size = UDim2.fromOffset(320, 500), BackgroundTransparency = 1, ZIndex = 100 })
     local nlist = new("UIListLayout", { Parent = nholder, Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Right })
     local nDir = 1
@@ -551,7 +903,7 @@ function Lib:CreateWindow(cfg)
     local KIND = { ok = SEM.Green, warn = SEM.Yellow, err = SEM.Red }
     local notifStack = {}
     function Win:Notify(title, text, dur, kind, force)
-        if not Win.NotifsOn and not force then return end
+        if Win.Destroyed or (not Win.NotifsOn and not force) then return end
         dur = dur or Win.NotifTime
         title, text = tostring(title or ""), tostring(text or "")
         local dir = nDir
@@ -564,7 +916,7 @@ function Lib:CreateWindow(cfg)
             local old = table.remove(notifStack, 1)
             if old and old.Close then old.Close() end
         end
-        local wrap = new("Frame", { Parent = nholder, Size = UDim2.fromOffset(NW, NH), BackgroundTransparency = 1 })
+        local wrap = new("Frame", { Parent = nholder, Size = UDim2.fromOffset(NW, NH), BackgroundTransparency = 1, Shadow = SH.Card }, { corner(14) })
         local card = new("CanvasGroup", { Parent = wrap, Position = UDim2.fromOffset((NW + 40) * dir, 0), Size = UDim2.fromScale(1, 1),
             BackgroundColor3 = Theme.Panel, GroupTransparency = 1 }, { corner(14), plainStroke(col, 1, 0.55) })
         new("Frame", { Parent = card, Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = col })
@@ -581,8 +933,8 @@ function Lib:CreateWindow(cfg)
             closing = true
             for i, e in ipairs(notifStack) do if e == entry then table.remove(notifStack, i) break end end
             tw(card, 0.35, { Position = UDim2.fromOffset((NW + 40) * dir, 0), GroupTransparency = 1 }, QUINT, IN)
-            task.delay(0.25, function() if wrap.Parent then tw(wrap, 0.25, { Size = UDim2.fromOffset(NW, 0) }, QUINT) end end)
-            task.delay(0.55, function() if wrap.Parent then wrap:Destroy() end end)
+            after(0.25, function() if wrap.Parent then tw(wrap, 0.25, { Size = UDim2.fromOffset(NW, 0) }, QUINT) end end)
+            after(0.55, function() if wrap.Parent then wrap:Destroy() end end)
         end
         entry.Close = close
         notifStack[#notifStack + 1] = entry
@@ -593,25 +945,34 @@ function Lib:CreateWindow(cfg)
         task.delay(dur, close)
     end
 
-    local confirm = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BackgroundTransparency = 1, Visible = false, ZIndex = 80 })
-    local cBox = new("Frame", { Parent = confirm, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(340, 150), BackgroundColor3 = B"Panel", ZIndex = 81 }, { corner(16), stk() })
+    ----------------------------------------------------------------
+    --  Подтверждение
+    ----------------------------------------------------------------
+    local confirm = new("Frame", { Parent = main, Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BackgroundTransparency = 1, Visible = false, ZIndex = 80 }, { corner(22) })
+    local cBox = new("Frame", { Parent = confirm, AnchorPoint = V2(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(340, 150),
+        BackgroundColor3 = B"Panel", ZIndex = 81, Shadow = SH.Window }, { corner(16), stk() })
     local cScale = new("UIScale", { Parent = cBox, Scale = 0.85 })
     local cTitle = label(cBox, "", UDim2.fromOffset(20, 18), UDim2.new(1, -40, 0, 22), Enum.Font.GothamBold, 16, B"Text") cTitle.ZIndex = 82
     local cText = label(cBox, "", UDim2.fromOffset(20, 46), UDim2.new(1, -40, 0, 40), Enum.Font.Gotham, 12, B"Sub", nil, { TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.None }) cText.ZIndex = 82
     local function cBtn(txt, x, accent)
         return new("TextButton", { Parent = cBox, Position = UDim2.new(x, x == 0 and 20 or 8, 1, -50), Size = UDim2.new(0.5, -28, 0, 34),
-            BackgroundColor3 = accent and B"Accent" or B"Panel2", Text = txt, TextColor3 = accent and B"OnAccent" or B"Text", Font = Enum.Font.GothamBold, TextSize = 12, ZIndex = 82 }, { corner(10) })
+            BackgroundColor3 = accent and B"Accent" or B"Panel2", Text = txt, TextColor3 = accent and B"OnAccent" or B"Text", Font = Enum.Font.GothamBold, TextSize = 12, ZIndex = 82,
+            Shadow = SH.Small }, { corner(10) })
     end
     local cNo, cYes = cBtn("Cancel", 0, false), cBtn("Yes", 0.5, true)
     local confirmYes
+    local confirmTok = 0
     local function closeConfirm()
+        confirmTok += 1
+        local my = confirmTok
         tw(confirm, 0.2, { BackgroundTransparency = 1 }, SINE)
         tw(cScale, 0.2, { Scale = 0.88 }, QUINT, IN)
-        task.delay(0.21, function() confirm.Visible = false end)
+        after(0.21, function() if my == confirmTok then confirm.Visible = false end end)
     end
     cNo.MouseButton1Click:Connect(closeConfirm)
     cYes.MouseButton1Click:Connect(function() closeConfirm() if confirmYes then confirmYes() end end)
     function Win:Confirm(title, text, yes)
+        confirmTok += 1
         cTitle.Text, cText.Text = title, text
         confirmYes = yes
         confirm.Visible = true
@@ -620,13 +981,22 @@ function Lib:CreateWindow(cfg)
         tw(cScale, 0.4, { Scale = 1 }, BACK)
     end
 
-    local openBtn = new("TextButton", { Parent = gui, AnchorPoint = V2(1, 1), Position = UDim2.new(1, -24, 1, -24), Size = UDim2.fromOffset(48, 48),
-        BackgroundColor3 = B"Accent", Visible = false, ZIndex = 70, Text = string.sub(cfg.Title or "F", 1, 1), TextColor3 = B"OnAccent", Font = Enum.Font.GothamBlack, TextSize = 20 }, { corner(24) })
+    ----------------------------------------------------------------
+    --  Кнопка открытия (просто иконка, без фона)
+    ----------------------------------------------------------------
+    local openBtn = new("ImageButton", { Parent = gui, AnchorPoint = V2(1, 1), Position = UDim2.new(1, -24, 1, -24), Size = UDim2.fromOffset(54, 54),
+        BackgroundTransparency = 1, AutoButtonColor = false, Visible = false, ZIndex = 70, ScaleType = Enum.ScaleType.Fit,
+        Image = type(LOGO) == "number" and ("rbxassetid://" .. LOGO) or LOGO })
     local openScale = new("UIScale", { Parent = openBtn })
+    local openDownAt
     drag(openBtn, openBtn)
-    openBtn.MouseEnter:Connect(function() tw(openScale, 0.3, { Scale = 1.1 }, BACK) end)
+    openBtn.InputBegan:Connect(function(i) if isPress(i) then openDownAt = openBtn.AbsolutePosition end end)
+    openBtn.MouseEnter:Connect(function() tw(openScale, 0.3, { Scale = 1.12 }, BACK) end)
     openBtn.MouseLeave:Connect(function() tw(openScale, 0.3, { Scale = 1 }, SINE) end)
 
+    ----------------------------------------------------------------
+    --  Вотермарка
+    ----------------------------------------------------------------
     local WM = {
         Enabled = false, Text = "{title} | {user} | {fps} fps | {ping} ms | {time}", Size = 1, Opacity = 0.92, TextSize = 13,
         Font = "GothamMedium", Round = 20, Bar = true, Border = true, Colors = true, TextMode = "Theme", TextCustom = WHITE,
@@ -634,7 +1004,7 @@ function Lib:CreateWindow(cfg)
     }
     Win.WM = WM
     local wm = new("CanvasGroup", { Parent = gui, Size = UDim2.fromOffset(0, 30), AutomaticSize = AUTO_X, BackgroundColor3 = Theme.Panel,
-        GroupTransparency = 1, Visible = false, ZIndex = 60 })
+        GroupTransparency = 1, Visible = false, ZIndex = 60, Shadow = SH.Card })
     local wmCorner = new("UICorner", { Parent = wm, CornerRadius = UDim.new(0, 15) })
     local wmStroke = new("UIStroke", { Parent = wm, Color = Theme.Accent, Transparency = 0.5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
     new("UIPadding", { Parent = wm, PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 16) })
@@ -651,7 +1021,7 @@ function Lib:CreateWindow(cfg)
     local ESC = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;" }
     local function tag(text, col) return '<font color="' .. hex(col) .. '">' .. text .. "</font>" end
     local TOK = {
-        title = function() return cfg.Title or "FEMBOYSENSE" end,
+        title = function() return (cfg.Title or "ZENITH"):gsub("[&<>]", ESC) end,
         user = function() return LocalPlayer.Name end,
         name = function() return LocalPlayer.DisplayName end,
         fps = function()
@@ -712,7 +1082,7 @@ function Lib:CreateWindow(cfg)
         else
             tw(wm, 0.22, { GroupTransparency = 1 }, SINE)
             tw(wmScale, 0.28, { Scale = WM.Size * 0.85 }, QUINT)
-            task.delay(0.3 / Lib.Speed, function() if wmTok == my then wm.Visible = false end end)
+            after(0.3, function() if wmTok == my then wm.Visible = false end end)
         end
     end
     function Win:SetWM(k, v)
@@ -727,11 +1097,14 @@ function Lib:CreateWindow(cfg)
         wmRefresh(true)
     end
 
+    ----------------------------------------------------------------
+    --  Список биндов (HUD)
+    ----------------------------------------------------------------
     local HUD = { Enabled = false, Title = "KEYBINDS", ShowTitle = true, ShowMode = true, Size = 1, Opacity = 0.92, Pos = "Top Left" }
     Win.HUD = HUD
     local HUD_W, ROW_H = 208, 26
     local hud = new("CanvasGroup", { Parent = gui, Position = UDim2.fromOffset(18, 64), Size = UDim2.fromOffset(HUD_W, 0), AutomaticSize = AUTO_Y,
-        BackgroundColor3 = Theme.Panel, BackgroundTransparency = 1 - HUD.Opacity, GroupTransparency = 1, Visible = false, ZIndex = 60 },
+        BackgroundColor3 = Theme.Panel, BackgroundTransparency = 1 - HUD.Opacity, GroupTransparency = 1, Visible = false, ZIndex = 60, Shadow = SH.Card },
         { corner(14), pad(8, 8, 8, 8), new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }) })
     local hudScale = new("UIScale", { Parent = hud })
     local hudStroke = new("UIStroke", { Parent = hud, Color = Theme.Accent, Transparency = 0.6, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
@@ -741,7 +1114,7 @@ function Lib:CreateWindow(cfg)
         BackgroundColor3 = Theme.Accent2, BackgroundTransparency = 0.35, Text = "0", Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = Theme.Text },
         { corner(9), pad(0, 0, 8, 8), new("UISizeConstraint", { MinSize = V2(22, 18) }) })
     local hudLine = new("Frame", { Parent = hud, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = Theme.Accent })
-    local hudLineGrad = new("UIGradient", { Parent = hudLine, Transparency = NumberSequence.new({ nk(0, 0.2), nk(0.6, 0.8), nk(1, 1) }) })
+    new("UIGradient", { Parent = hudLine, Transparency = NumberSequence.new({ nk(0, 0.2), nk(0.6, 0.8), nk(1, 1) }) })
     new("Frame", { Parent = hud, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 3), BackgroundTransparency = 1 })
     place(hud, HUD.Pos, 64)
     drag(hud, hud)
@@ -795,7 +1168,7 @@ function Lib:CreateWindow(cfg)
         tw(r.Frame, 0.3, { Size = UDim2.new(1, 0, 0, 0) }, QUINT)
         tw(r.Inner, 0.2, { GroupTransparency = 1 }, SINE)
         tw(r.Scale, 0.3, { Scale = 0.85 }, QUINT)
-        task.delay(0.34 / Lib.Speed, function()
+        after(0.34, function()
             if r.tok == my and r.Frame.Parent then
                 r.Frame:Destroy()
                 if hudRows[b] == r then hudRows[b] = nil end
@@ -837,7 +1210,7 @@ function Lib:CreateWindow(cfg)
             local my = hudTok
             tw(hud, 0.3, { GroupTransparency = 1 }, SINE)
             tw(hudScale, 0.35, { Scale = HUD.Size * 0.9 }, QUINT)
-            task.delay(0.4 / Lib.Speed, function() if hudTok == my then hud.Visible = false end end)
+            after(0.4, function() if hudTok == my then hud.Visible = false end end)
         end
     end
     local hudQueued = false
@@ -859,6 +1232,55 @@ function Lib:CreateWindow(cfg)
         elseif k == "ShowTitle" then hudHead.Visible = v hudLine.Visible = v end
     end
 
+    ----------------------------------------------------------------
+    --  ESP превью (плавающее окно)
+    ----------------------------------------------------------------
+    local espWin, espScale, espOn, espShown, espTok
+    espTok = 0
+    local function refreshEsp()
+        if not espWin then return end
+        local want = espOn and Win.Open
+        if want == espShown then return end
+        espShown = want
+        espTok += 1
+        local my = espTok
+        if want then
+            espWin.Visible = true
+            espScale.Scale = 0.88
+            tw(espScale, 0.5, { Scale = 1 }, BACK)
+        else
+            tw(espScale, 0.25, { Scale = 0.88 }, QUINT, IN)
+            after(0.26, function() if espTok == my then espWin.Visible = false end end)
+        end
+    end
+    function Win:ShowESPPreview(on)
+        espOn = on and true or false
+        if espOn and not espWin then
+            espWin = new("Frame", { Parent = gui, AnchorPoint = V2(0.5, 0.5), Position = UDim2.new(1, -(ESP_W + 32) / 2 - 24, 0.5, 0),
+                Size = UDim2.fromOffset(ESP_W + 32, ESP_H + 68), BackgroundTransparency = 1, Visible = false, ZIndex = 40 })
+            espScale = new("UIScale", { Parent = espWin })
+            local P = buildPreviewCard(espWin, "ESP Preview")
+            drag(P.Card, espWin)
+            local x = new("TextButton", { Parent = P.Card, AnchorPoint = V2(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.fromOffset(28, 28),
+                BackgroundColor3 = B"Bg", Text = "×", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 18, Shadow = SH.Small }, { corner(9) })
+            x.MouseButton1Click:Connect(function() Win:ShowESPPreview(false) end)
+        end
+        refreshEsp()
+    end
+    function Win:ESPSet(k, v)
+        ESP.State[k] = v
+        for _, P in ipairs(ESP.List) do if P.Stage.Parent then P:Apply() end end
+    end
+    function Win:ESPGet(k) return ESP.State[k] end
+    function Win:ESPSetAvatar(id)
+        ESP.AvatarId = id
+        for _, P in ipairs(ESP.List) do P:SetAvatar(id) end
+    end
+    espBtn.MouseButton1Click:Connect(function() Win:ShowESPPreview(not espOn) end)
+
+    ----------------------------------------------------------------
+    --  Главный цикл (оптимизирован: декор 30 Гц, пауза когда скрыто)
+    ----------------------------------------------------------------
     local frames, accFps, decorAcc, wmAcc = 0, 0, 0, 0
     keep(RunService.RenderStepped:Connect(function(dt)
         local open = Win.Open
@@ -878,6 +1300,7 @@ function Lib:CreateWindow(cfg)
             if open then
                 if Win.BorderSpin ~= 0 then ringGrad.Rotation = (ringGrad.Rotation + d * Win.BorderSpin) % 360 end
                 if Win.BorderPulse then mainStroke.Transparency = clamp(Win._glowT + 0.15 * sin(os.clock() * 2.4), 0, 1) end
+                if PAT.On or PAT.Glow then stepPattern(d) end
             end
             wmAcc += d
             if wmAcc >= 0.25 then
@@ -887,6 +1310,9 @@ function Lib:CreateWindow(cfg)
         end
     end))
 
+    ----------------------------------------------------------------
+    --  Навигация и страницы
+    ----------------------------------------------------------------
     local function layoutNav()
         local y = 0
         for _, g in ipairs(Win.Groups) do
@@ -942,7 +1368,7 @@ function Lib:CreateWindow(cfg)
             m.Holder.Parent = (i % 2 == 1) and colL or colR
             m.Card.GroupTransparency = 1
             m.Scale.Scale = 0.95
-            task.delay(0.02 + math.min(i - 1, 8) * 0.04, function()
+            after(0.02 + math.min(i - 1, 8) * 0.04, function()
                 if tok == layoutTok and m.Holder.Parent ~= stash then
                     tw(m.Card, 0.4, { GroupTransparency = 0 }, SINE)
                     tw(m.Scale, 0.5, { Scale = 1 }, BACK)
@@ -998,8 +1424,8 @@ function Lib:CreateWindow(cfg)
 
     local function gotoCat(cat)
         if not cat then return end
-        searchBox.Text = ""
         Win.Query = ""
+        searchBox.Text = ""
         Win:Select(cat)
     end
 
@@ -1033,14 +1459,21 @@ function Lib:CreateWindow(cfg)
             cat.Tops[#cat.Tops + 1] = f
             return f
         end
+        function cat:AddESPPreview()
+            local f = cat:AddCustom(ESP_H + 68)
+            return buildPreviewCard(f, "ESP Preview")
+        end
 
+        ------------------------------------------------------------
+        --  Модуль (карточка)
+        ------------------------------------------------------------
         function cat:AddModule(o)
             o = o or {}
             local defKey = (o.Keybind ~= true) and o.Keybind or nil
             local mod = { Name = o.Name or "Module", Info = o.Info, Cat = cat, State = o.Default and true or false, Key = defKey, DefaultKey = defKey,
                 Mode = o.Mode or "Toggle", Static = o.Static, Hud = o.Hud ~= false, _n = 0,
                 Search = ((o.Name or "") .. " " .. (o.Info or "")):lower() }
-            local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 })
+            local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1, Shadow = SH.Card }, { corner(16) })
             mod.Scale = new("UIScale", { Parent = holder })
             local card = new("CanvasGroup", { Parent = holder, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundColor3 = B"Panel" },
                 { corner(16), pad(14, 14, 16, 16), new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }) })
@@ -1125,7 +1558,7 @@ function Lib:CreateWindow(cfg)
                 local status = new("Frame", { Parent = card, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 })
                 local stL = label(status, "Disabled", nil, UDim2.new(1, -140, 1, 0), Enum.Font.GothamMedium, 13, B"Sub")
                 local pill = new("TextButton", { Parent = status, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -50, 0.5, 0), Size = UDim2.fromOffset(0, 22), AutomaticSize = AUTO_X,
-                    BackgroundColor3 = B"Panel2", Text = "BIND", TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(7), pad(0, 0, 9, 9) })
+                    BackgroundColor3 = B"Panel2", Text = "BIND", TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10, Shadow = SH.Tiny }, { corner(7), pad(0, 0, 9, 9) })
                 local pillScale = new("UIScale", { Parent = pill })
                 local function paintPill(listening)
                     pill.Text = listening and "..." or (mod.Key and keyName(mod.Key) or "BIND")
@@ -1176,14 +1609,14 @@ function Lib:CreateWindow(cfg)
                 local krow = new("Frame", { Parent = sf, LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
                 label(krow, "Keybind", nil, UDim2.new(1, -200, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
                 local modeB = new("TextButton", { Parent = krow, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -86, 0.5, 0), Size = UDim2.fromOffset(62, 24),
-                    BackgroundColor3 = B"Panel2", Text = mod.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                    BackgroundColor3 = B"Panel2", Text = mod.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10, Shadow = SH.Tiny }, { corner(8) })
                 modeB.MouseButton1Click:Connect(function()
                     mod.Mode = mod.Mode == "Toggle" and "Hold" or "Toggle"
                     modeB.Text = mod.Mode
                     Win:RefreshHud()
                 end)
                 local kb = new("TextButton", { Parent = krow, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
-                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10, Shadow = SH.Tiny }, { corner(8) })
                 local rb = resetBtn(krow, UDim2.new(1, -156, 0.5, 0), function() mod:SetKey(mod.DefaultKey) end)
                 local function paintKb(k)
                     kb.Text = k and keyName(k) or "NONE"
@@ -1210,16 +1643,18 @@ function Lib:CreateWindow(cfg)
 
             function mod:AddToggle(t)
                 addWord(t.Name or "")
+                local def = t.Default and true or false
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 })
                 label(row, t.Name or "Toggle", nil, UDim2.new(1, -56, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
-                local sw = makeSwitch(row, t.Default, function(v) fire(t.Callback, v) end)
+                local sw = makeSwitch(row, def, function(v) fire(t.Callback, v) end)
                 local api = { Row = row }
                 function api:Set(v, silent) sw:Set(v, silent) end
                 function api:Get() return sw:Get() end
                 api.Export = function() return sw:Get() end
                 api.Import = function(v) sw:Set(v and true or false) end
+                api.Reset = function() sw:Set(def) end
                 flag(t, api)
-                if t.Default then task.defer(fire, t.Callback, true) end
+                if def then task.defer(fire, t.Callback, true) end
                 return api
             end
 
@@ -1236,7 +1671,8 @@ function Lib:CreateWindow(cfg)
             function mod:AddOptions(t)
                 addWord(t.Name or "")
                 local opts = t.Options or {}
-                local sel = t.Default or opts[1]
+                local def = t.Default or opts[1]
+                local sel = def
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, 0), AutomaticSize = AUTO_Y, BackgroundTransparency = 1 },
                     { new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
                 label(row, t.Name or "Options", nil, UDim2.new(1, 0, 0, 16), Enum.Font.GothamMedium, 12, B"Sub", nil, { LayoutOrder = 1 })
@@ -1251,7 +1687,7 @@ function Lib:CreateWindow(cfg)
                 end
                 for i, name in ipairs(opts) do
                     local b = new("TextButton", { Parent = wrapF, LayoutOrder = i, Size = UDim2.fromOffset(0, 26), AutomaticSize = AUTO_X, BackgroundColor3 = B"Panel2",
-                        Text = tostring(name), TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 11 }, { corner(8), pad(0, 0, 12, 12) })
+                        Text = tostring(name), TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 11, Shadow = SH.Tiny }, { corner(8), pad(0, 0, 12, 12) })
                     btns[name] = b
                     b.MouseButton1Click:Connect(function()
                         if sel ~= name then
@@ -1268,6 +1704,7 @@ function Lib:CreateWindow(cfg)
                 function api:Get() return sel end
                 api.Export = function() return sel end
                 api.Import = function(v) api:Set(v) end
+                api.Reset = function() api:Set(def) end
                 flag(t, api)
                 return api
             end
@@ -1275,12 +1712,13 @@ function Lib:CreateWindow(cfg)
             function mod:AddDropdown(t)
                 addWord(t.Name or "")
                 local opts = t.Options or {}
-                local sel = t.Default or opts[1]
+                local def = t.Default or opts[1]
+                local sel = def
                 local ROW, ITEM, MAXV = 28, 26, 7
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, ROW), BackgroundTransparency = 1, ClipsDescendants = true })
                 label(row, t.Name or "Dropdown", UDim2.new(), UDim2.new(1, -150, 0, ROW), Enum.Font.GothamMedium, 13, B"Text")
                 local selL = label(row, tostring(sel or "-"), UDim2.new(1, -150, 0, 0), UDim2.fromOffset(130, ROW), Enum.Font.GothamBold, 12, B"Accent", Enum.TextXAlignment.Right)
-                local arrow = label(row, "v", UDim2.new(1, -14, 0, 0), UDim2.fromOffset(14, ROW), Enum.Font.GothamBold, 11, B"Sub", Enum.TextXAlignment.Center)
+                local arrow = label(row, "v", UDim2.new(1, -14, 0, 0), UDim2.fromOffset(14, ROW), Enum.Font.GothamBold, 11, B"Sub", CENTER)
                 local list = new("ScrollingFrame", { Parent = row, Position = UDim2.fromOffset(0, ROW + 4), Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1,
                     ScrollBarThickness = 2, ScrollBarImageColor3 = B"Accent", CanvasSize = UDim2.new(), AutomaticCanvasSize = AUTO_Y },
                     { new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }) })
@@ -1332,6 +1770,7 @@ function Lib:CreateWindow(cfg)
                 end
                 api.Export = function() return sel end
                 api.Import = function(v) api:Set(v) end
+                api.Reset = function() api:Set(def) end
                 flag(t, api)
                 return api
             end
@@ -1341,7 +1780,7 @@ function Lib:CreateWindow(cfg)
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
                 label(row, t.Name or "Button", nil, UDim2.new(1, -90, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
                 local b = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 26),
-                    BackgroundColor3 = B"Panel2", Text = t.ButtonText or "RUN", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 11 }, { corner(8) })
+                    BackgroundColor3 = B"Panel2", Text = t.ButtonText or "RUN", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 11, Shadow = SH.Small }, { corner(8) })
                 local sc = new("UIScale", { Parent = b })
                 b.MouseEnter:Connect(function() tw(b, 0.2, { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.OnAccent }, SINE) end)
                 b.MouseLeave:Connect(function() tw(b, 0.25, { BackgroundColor3 = Theme.Panel2, TextColor3 = Theme.Text }, SINE) end)
@@ -1354,13 +1793,14 @@ function Lib:CreateWindow(cfg)
             function mod:AddTextbox(t)
                 addWord(t.Name or "")
                 local wide = t.Wide == true
+                local def = t.Default or ""
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, wide and 56 or 30), BackgroundTransparency = 1 })
                 label(row, t.Name or "Textbox", nil, wide and UDim2.new(1, 0, 0, 20) or UDim2.new(1, -150, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
                 local back = new("Frame", { Parent = row, AnchorPoint = V2(1, wide and 1 or 0.5), Position = UDim2.new(1, 0, wide and 1 or 0.5, 0),
-                    Size = wide and UDim2.new(1, 0, 0, 30) or UDim2.fromOffset(140, 28), BackgroundColor3 = B"Bg" }, { corner(9) })
+                    Size = wide and UDim2.new(1, 0, 0, 30) or UDim2.fromOffset(140, 28), BackgroundColor3 = B"Bg", Shadow = SH.Tiny }, { corner(9) })
                 local bs = new("UIStroke", { Color = B"Accent", Transparency = 1, Thickness = 1.2, Parent = back })
                 local box = new("TextBox", { Parent = back, Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0), BackgroundTransparency = 1,
-                    PlaceholderText = t.Placeholder or "", PlaceholderColor3 = B"Sub", Text = t.Default or "", TextColor3 = B"Text", TextSize = 12,
+                    PlaceholderText = t.Placeholder or "", PlaceholderColor3 = B"Sub", Text = def, TextColor3 = B"Text", TextSize = 12,
                     ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left })
                 box.Focused:Connect(function() tw(bs, 0.25, { Transparency = 0.4 }, SINE) end)
                 box.FocusLost:Connect(function(enter)
@@ -1375,6 +1815,7 @@ function Lib:CreateWindow(cfg)
                 function api:Get() return box.Text end
                 api.Export = function() return box.Text end
                 api.Import = function(v) if type(v) == "string" then box.Text = v fire(t.Callback, v, false) end end
+                api.Reset = function() box.Text = def fire(t.Callback, def, false) end
                 flag(t, api)
                 return api
             end
@@ -1389,11 +1830,12 @@ function Lib:CreateWindow(cfg)
 
             function mod:AddKeybind(t)
                 addWord(t.Name or "")
-                local b = { Name = t.Name, Key = t.Default, Default = t.Default, Mode = t.Mode or "Press", Callback = t.Callback, State = false, Hud = t.Hud ~= false }
+                local b = { Name = t.Name, Key = t.Default, Default = t.Default, Mode = t.Mode or "Press", DefaultMode = t.Mode or "Press",
+                    Callback = t.Callback, State = false, Hud = t.Hud ~= false }
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 })
                 label(row, t.Name or "Keybind", nil, UDim2.new(1, -200, 1, 0), Enum.Font.GothamMedium, 13, B"Text")
                 local modeB = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, -86, 0.5, 0), Size = UDim2.fromOffset(62, 24),
-                    BackgroundColor3 = B"Panel2", Text = b.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                    BackgroundColor3 = B"Panel2", Text = b.Mode, TextColor3 = B"Sub", Font = Enum.Font.GothamBold, TextSize = 10, Shadow = SH.Tiny }, { corner(8) })
                 local MODES = { "Press", "Toggle", "Hold" }
                 modeB.MouseButton1Click:Connect(function()
                     b.Mode = MODES[(table.find(MODES, b.Mode) or 1) % 3 + 1]
@@ -1402,14 +1844,10 @@ function Lib:CreateWindow(cfg)
                     Win:RefreshHud()
                 end)
                 local kb = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(78, 24),
-                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10 }, { corner(8) })
+                    BackgroundColor3 = B"Panel2", Text = "", TextColor3 = B"Text", Font = Enum.Font.GothamBold, TextSize = 10, Shadow = SH.Tiny }, { corner(8) })
                 local paint
-                local rb = resetBtn(row, UDim2.new(1, -156, 0.5, 0), function()
-                    b.Key = b.Default
-                    paint()
-                    Win:RefreshHud()
-                    if t.Changed then fire(t.Changed, b.Key) end
-                end)
+                local function changed() paint() Win:RefreshHud() if t.Changed then fire(t.Changed, b.Key) end end
+                local rb = resetBtn(row, UDim2.new(1, -156, 0.5, 0), function() b.Key = b.Default changed() end)
                 paint = function()
                     kb.Text = b.Key and keyName(b.Key) or "NONE"
                     rb.Visible = (b.Key ~= b.Default)
@@ -1419,9 +1857,7 @@ function Lib:CreateWindow(cfg)
                     kb.Text = "..."
                     Lib._listen = function(k)
                         if k == Enum.KeyCode.Escape or k == Enum.KeyCode.Backspace then b.Key = nil else b.Key = k end
-                        paint()
-                        Win:RefreshHud()
-                        if t.Changed then fire(t.Changed, b.Key) end
+                        changed()
                     end
                 end)
                 b.Press = function(down)
@@ -1443,9 +1879,12 @@ function Lib:CreateWindow(cfg)
                     if type(v) ~= "table" then return end
                     b.Key = v.Key and keyFromName(v.Key) or nil
                     if v.Mode and table.find(MODES, v.Mode) then b.Mode = v.Mode modeB.Text = v.Mode end
-                    paint()
-                    Win:RefreshHud()
-                    if t.Changed then fire(t.Changed, b.Key) end
+                    changed()
+                end
+                api.Reset = function()
+                    b.Key, b.Mode = b.Default, b.DefaultMode
+                    modeB.Text = b.Mode
+                    changed()
                 end
                 flag(t, api)
                 return api
@@ -1453,13 +1892,14 @@ function Lib:CreateWindow(cfg)
 
             function mod:AddColorPicker(t)
                 addWord(t.Name or "")
-                local col = t.Default or WHITE
+                local def = t.Default or WHITE
+                local col = def
                 local hh, ss, vv = col:ToHSV()
                 local OPEN_H = 212
                 local row = new("Frame", { Parent = sf, LayoutOrder = order(), Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, ClipsDescendants = true })
                 label(row, t.Name or "Color", UDim2.new(), UDim2.new(1, -120, 0, 26), Enum.Font.GothamMedium, 13, B"Text")
                 local hexL = label(row, "#FFFFFF", UDim2.new(1, -118, 0, 0), UDim2.fromOffset(70, 26), Enum.Font.GothamBold, 11, B"Sub", Enum.TextXAlignment.Right)
-                local sw = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0), Position = UDim2.new(1, 0, 0, 3), Size = UDim2.fromOffset(40, 20), BackgroundColor3 = col },
+                local sw = new("TextButton", { Parent = row, AnchorPoint = V2(1, 0), Position = UDim2.new(1, 0, 0, 3), Size = UDim2.fromOffset(40, 20), BackgroundColor3 = col, Shadow = SH.Tiny },
                     { corner(7), new("UIStroke", { Color = WHITE, Transparency = 0.7, Thickness = 1 }) })
                 local sv = new("Frame", { Parent = row, Position = UDim2.fromOffset(0, 34), Size = UDim2.new(1, 0, 0, 112), BackgroundColor3 = Color3.fromHSV(hh, 1, 1), ClipsDescendants = true }, { corner(8) })
                 new("Frame", { Parent = sv, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, ZIndex = 2 }, { new("UIGradient", { Transparency = NumberSequence.new(0, 1) }) })
@@ -1534,6 +1974,7 @@ function Lib:CreateWindow(cfg)
                 function api:Get() return col end
                 api.Export = function() return { floor(col.R * 255 + 0.5), floor(col.G * 255 + 0.5), floor(col.B * 255 + 0.5) } end
                 api.Import = function(v) if type(v) == "table" and #v == 3 then api:Set(rgb(v[1], v[2], v[3])) end end
+                api.Reset = function() api:Set(def) end
                 flag(t, api)
                 return api
             end
@@ -1553,6 +1994,10 @@ function Lib:CreateWindow(cfg)
                     mod:Set(v.State)
                     Win:RefreshHud()
                 end
+                api.Reset = function()
+                    mod:SetKey(mod.DefaultKey, true)
+                    mod:Set(o.Default and true or false)
+                end
                 api.Set = function(_, v) mod:Set(v) end
                 api.Get = function() return mod.State end
                 Lib.Flags[o.Flag] = api
@@ -1571,11 +2016,14 @@ function Lib:CreateWindow(cfg)
         return cat
     end
 
+    ----------------------------------------------------------------
+    --  Настройки окна
+    ----------------------------------------------------------------
     function Win:SetOpacity(v)
         Win.Opacity = v
         for _, g in ipairs(glassObjs) do tw(g[1], 0.2, { BackgroundTransparency = glassFinal(g) }, SINE) end
     end
-    function Win:SetTheme(def, silent)
+    function Win:SetTheme(def)
         Win.ThemeDef = def
         Win.CustomAccent2 = nil
         applyTheme(def)
@@ -1604,7 +2052,7 @@ function Lib:CreateWindow(cfg)
         applyTheme(def, true)
         if Lib.Flags.AccentColor2 then Lib.Flags.AccentColor2:SetSilent(Theme.Accent2) end
     end
-    function Win:SetScale(v) Win.userScale = v if Win.Open then tw(scale, 0.35, { Scale = fit() }, QUINT) end end
+    function Win:SetScale(v) Win.userScale = v tw(scale, 0.35, { Scale = fit() }, QUINT) end
     function Win:SetGlow(g)
         Win._glowT = 0.75 - g * 0.7
         if not Win.BorderPulse then mainStroke.Transparency = Win._glowT end
@@ -1615,39 +2063,72 @@ function Lib:CreateWindow(cfg)
         Win.BorderPulse = on and true or false
         if not on then mainStroke.Transparency = Win._glowT end
     end
+    function Win:SetShadows(on) ShadowState.On = on and true or false refreshShadows() end
+    function Win:SetShadowAmount(v) ShadowState.Amount = v refreshShadows() end
     function Win:SetFreeMouse(on) Win.FreeMouse = on and true or false end
     function Win:SetSpeed(v) Lib.Speed = v end
     function Win:SetLockPos(v) Win.LockPos = v end
     function Win:ResetPos() tw(root, 0.6, { Position = UDim2.fromScale(0.5, 0.5) }, QUINT) end
     function Win:SetMenuKey(k) Win.ToggleKey = k setFooter() end
 
+    ----------------------------------------------------------------
+    --  Открытие / закрытие: верх и низ схлопываются к центру
+    ----------------------------------------------------------------
+    local animTok = 0
     function Win:Show()
-        if Win.Open then return end
+        if Win.Open or Win.Destroyed then return end
         Win.Open = true
+        animTok += 1
+        local my = animTok
         root.Visible = true
         openBtn.Visible = false
-        scale.Scale = fit() * 0.85
-        tw(scale, 0.6, { Scale = fit() }, BACK)
+        clip.Size = SHUT
+        line.Visible = true
+        line.BackgroundTransparency = 0
+        line.Size = UDim2.fromOffset(0, 2)
+        tw(line, 0.22, { Size = UDim2.fromOffset(W * 0.7, 2) }, QUART)
+        after(0.16, function()
+            if animTok ~= my then return end
+            tw(clip, 0.75, { Size = FULL }, QUART, OUT)
+            tw(line, 0.4, { BackgroundTransparency = 1 }, SINE)
+        end)
+        after(0.95, function() if animTok == my then line.Visible = false end end)
+        Win:RegeneratePattern()
         if Win.Current then layout() end
+        refreshEsp()
     end
     function Win:Hide()
         if not Win.Open then return end
         Win.Open = false
-        tw(scale, 0.3, { Scale = fit() * 0.85 }, QUINT, IN)
-        task.delay(0.3, function()
-            if not Win.Open then
-                root.Visible = false
-                openBtn.Visible = true
-                openBtn.Size = UDim2.fromOffset(0, 0)
-                tw(openBtn, 0.45, { Size = UDim2.fromOffset(48, 48) }, BACK)
-            end
+        animTok += 1
+        local my = animTok
+        tw(clip, 0.55, { Size = SHUT }, QUART, INOUT)
+        after(0.45, function()
+            if animTok ~= my then return end
+            line.Visible = true
+            line.BackgroundTransparency = 0
+            line.Size = UDim2.fromOffset(W * 0.7, 2)
+            tw(line, 0.35, { Size = UDim2.fromOffset(0, 2) }, QUART)
+            after(0.15, function() if animTok == my then tw(line, 0.2, { BackgroundTransparency = 1 }, SINE) end end)
         end)
+        after(0.85, function()
+            if animTok ~= my then return end
+            line.Visible = false
+            root.Visible = false
+            openBtn.Visible = true
+            openBtn.Size = UDim2.fromOffset(0, 0)
+            tw(openBtn, 0.45, { Size = UDim2.fromOffset(54, 54) }, BACK)
+        end)
+        refreshEsp()
     end
     function Win:Toggle() if Win.Open then Win:Hide() else Win:Show() end end
-    openBtn.MouseButton1Click:Connect(function() Win:Show() end)
+    openBtn.MouseButton1Click:Connect(function()
+        if openDownAt and (openBtn.AbsolutePosition - openDownAt).Magnitude > 6 then return end -- это был драг
+        Win:Show()
+    end)
     hideBtn.MouseButton1Click:Connect(function()
         Win:Hide()
-        Win:Notify("Menu hidden", "Press " .. keyName(Win.ToggleKey) .. " or the round button to open", 3)
+        Win:Notify("Menu hidden", "Press " .. keyName(Win.ToggleKey) .. " or the icon to open", 3)
     end)
     closeBtn.MouseButton1Click:Connect(function()
         Win:Confirm("Unload hub?", "This fully closes the hub and removes every effect.", function() Win:Destroy() end)
@@ -1655,16 +2136,31 @@ function Lib:CreateWindow(cfg)
     gearBtn.MouseButton1Click:Connect(function() gotoCat(Win.SettingsCat) end)
     account.MouseButton1Click:Connect(function() gotoCat(Win.ConfigsCat) end)
 
+    ----------------------------------------------------------------
+    --  Конфиги / экспорт / сброс
+    ----------------------------------------------------------------
     Lib.Flags.Theme = {
         Export = function() return { Name = Win.ThemeDef.Name, Mode = Win.ThemeDef.Mode } end,
         Import = function(v)
             if type(v) ~= "table" then return end
             local found
             for _, d in ipairs(THEMES) do if d.Name == v.Name and d.Mode == v.Mode then found = d break end end
-            if found then Win:SetTheme(found, true)
-            elseif v.Mode then Win:SetTheme({ Name = "Custom", Mode = v.Mode, Accent = Theme.Accent }, true) end
+            if found then Win:SetTheme(found)
+            elseif v.Mode then Win:SetTheme({ Name = "Custom", Mode = v.Mode, Accent = Theme.Accent }) end
         end,
+        Reset = function() Win:SetTheme(DEFAULT_THEME) end,
     }
+
+    local function orderedFlagNames(source)
+        local keys = {}
+        for f in pairs(source) do keys[#keys + 1] = f end
+        table.sort(keys, function(a, b)
+            if a == "Theme" then return b ~= "Theme" end
+            if b == "Theme" then return false end
+            return a < b
+        end)
+        return keys
+    end
 
     function Win:ExportString()
         local data = {}
@@ -1680,20 +2176,23 @@ function Lib:CreateWindow(cfg)
         local ok, data = pcall(function() return HttpService:JSONDecode(s) end)
         if not ok or type(data) ~= "table" then return false end
         Win.Loading = true
-        local keys = {}
-        for f in pairs(data) do keys[#keys + 1] = f end
-        table.sort(keys, function(a, b)
-            if a == "Theme" then return b ~= "Theme" end
-            if b == "Theme" then return false end
-            return a < b
-        end)
-        for _, f in ipairs(keys) do
+        for _, f in ipairs(orderedFlagNames(data)) do
             local a = Lib.Flags[f]
             if a and a.Import then pcall(a.Import, data[f]) end
         end
         Win.Loading = false
         return true
     end
+    function Win:ResetAll()
+        Win.Loading = true
+        for _, f in ipairs(orderedFlagNames(Lib.Flags)) do
+            local a = Lib.Flags[f]
+            if type(a) == "table" and a.Reset then pcall(a.Reset) end
+        end
+        Win.Loading = false
+        Win:ResetPos()
+    end
+
     local FOLDER = Win.FolderName
     local function clean(n) return (tostring(n):gsub("[^%w_%- ]", "")) end
     local function ensure() pcall(function() if makefolder and isfolder and not isfolder(FOLDER) then makefolder(FOLDER) end end) end
@@ -1756,29 +2255,61 @@ function Lib:CreateWindow(cfg)
         Win.Destroyed = true
         if Win.AutoSave then pcall(function() Win:SaveConfig(Win.AutoSaveName) end) end
         pcall(function() modalBtn.Modal = false end)
-        tw(scale, 0.4, { Scale = 0 }, QUINT, IN)
+        animTok += 1
+        Win.Open = false
+        tw(clip, 0.45, { Size = SHUT }, QUART, INOUT)
         tw(wm, 0.3, { GroupTransparency = 1 }, SINE)
         tw(hud, 0.3, { GroupTransparency = 1 }, SINE)
-        genv.FemboysenseUnload = nil
-        task.delay(0.45, function()
+        if espScale then tw(espScale, 0.25, { Scale = 0 }, QUINT, IN) end
+        genv.ZenithUnload = nil
+        task.delay(0.6, function()
             for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
-            conns, reg, hooks, grads = {}, {}, {}, {}
+            conns, reg, hooks, grads, shadows = {}, {}, {}, {}, {}
+            ESP.List = {}
             active = nil
             Lib._gui = nil
             Lib._listen = nil
             gui:Destroy()
         end)
     end
-    genv.FemboysenseUnload = function() Win:Destroy() end
+    genv.ZenithUnload = function() Win:Destroy() end
 
+    ----------------------------------------------------------------
+    --  Finish: системные страницы (ESP Preview, Settings, Configs)
+    ----------------------------------------------------------------
     function Win:Finish()
         if Win._finished then return end
         Win._finished = true
         Win:AddGroup("SYSTEM")
-        local st = Win:AddCategory("Settings", Icons.Settings, "Theme, window, overlays and notifications.")
+        local pv = Win:AddCategory("ESP Preview", Icons.Visuals, "See how your ESP looks on your own avatar.")
+        local st = Win:AddCategory("Settings", Icons.Settings, "Theme, effects, window, overlays and notifications.")
         local cf = Win:AddCategory("Configs", Icons.Configs, "Save, load and share your setups.")
         Win.SettingsCat, Win.ConfigsCat = st, cf
 
+        ---- ESP Preview ----
+        pv:AddESPPreview()
+        local pm = pv:AddModule({ Name = "ESP settings (demo)", Icon = Icons.Visuals, Static = true,
+            Info = "Demo controls. In your own ESP call Win:ESPSet(key, value)" })
+        local function E(k) return function(v) Win:ESPSet(k, v) end end
+        pm:AddToggle({ Name = "Window preview", Flag = "PV_Window", Callback = function(v) Win:ShowESPPreview(v) end })
+        pm:AddToggle({ Name = "Box", Default = true, Flag = "PV_Box", Callback = E("Box") })
+        pm:AddOptions({ Name = "Box style", Options = { "Full", "Corner" }, Default = "Full", Flag = "PV_BoxStyle", Callback = E("BoxStyle") })
+        pm:AddColorPicker({ Name = "Box color", Default = WHITE, Flag = "PV_BoxColor", Callback = E("BoxColor") })
+        pm:AddToggle({ Name = "Box fill", Flag = "PV_BoxFill", Callback = E("BoxFill") })
+        pm:AddColorPicker({ Name = "Fill color", Default = rgb(255, 255, 255), Flag = "PV_BoxFillColor", Callback = E("BoxFillColor") })
+        pm:AddToggle({ Name = "Name", Default = true, Flag = "PV_Name", Callback = E("Name") })
+        pm:AddColorPicker({ Name = "Name color", Default = WHITE, Flag = "PV_NameColor", Callback = E("NameColor") })
+        pm:AddToggle({ Name = "Health bar", Default = true, Flag = "PV_Health", Callback = E("Health") })
+        pm:AddSlider({ Name = "Health value", Min = 0, Max = 100, Default = 78, Suffix = "%", Flag = "PV_HealthValue", Callback = function(v) Win:ESPSet("HealthValue", v / 100) end })
+        pm:AddToggle({ Name = "Distance", Default = true, Flag = "PV_Distance", Callback = E("Distance") })
+        pm:AddToggle({ Name = "Weapon", Flag = "PV_Weapon", Callback = E("Weapon") })
+        pm:AddToggle({ Name = "Tracer", Flag = "PV_Tracer", Callback = E("Tracer") })
+        pm:AddColorPicker({ Name = "Tracer color", Default = WHITE, Flag = "PV_TracerColor", Callback = E("TracerColor") })
+        pm:AddToggle({ Name = "Chams", Flag = "PV_Chams", Callback = E("Chams") })
+        pm:AddColorPicker({ Name = "Chams color", Default = rgb(255, 70, 110), Flag = "PV_ChamsColor", Callback = E("ChamsColor") })
+        pm:AddSlider({ Name = "Chams transparency", Min = 0, Max = 100, Default = 55, Suffix = "%", Flag = "PV_ChamsT", Callback = function(v) Win:ESPSet("ChamsTransparency", v / 100) end })
+
+        ---- Themes grid ----
         local rows = math.ceil(#THEMES / 4)
         local grid = st:AddCustom(rows * 96)
         new("UIGridLayout", { Parent = grid, CellSize = UDim2.new(0.25, -9, 0, 84), CellPadding = UDim2.fromOffset(12, 12), SortOrder = Enum.SortOrder.LayoutOrder })
@@ -1786,7 +2317,7 @@ function Lib:CreateWindow(cfg)
         for i, def in ipairs(THEMES) do
             local base = def.Mode == "Light" and LIGHT or DARK
             local c = def.Colors or {}
-            local b = new("TextButton", { Parent = grid, LayoutOrder = i, BackgroundColor3 = B"Panel" }, { corner(14) })
+            local b = new("TextButton", { Parent = grid, LayoutOrder = i, BackgroundColor3 = B"Panel", Shadow = SH.Small }, { corner(14) })
             local sc = new("UIScale", { Parent = b })
             themeScales[i] = sc
             local s = new("UIStroke", { Thickness = 1, Parent = b })
@@ -1807,10 +2338,11 @@ function Lib:CreateWindow(cfg)
         st.OnShow = function()
             for i, sc in ipairs(themeScales) do
                 sc.Scale = 0.85
-                task.delay((i - 1) * 0.03, function() tw(sc, 0.5, { Scale = 1 }, BACK) end)
+                after((i - 1) * 0.03, function() tw(sc, 0.5, { Scale = 1 }, BACK) end)
             end
         end
 
+        ---- Theme ----
         local th = st:AddModule({ Name = "Theme", Icon = Icons.Visuals, Info = "Colors of the interface", Static = true })
         th:AddColorPicker({ Name = "Accent color", Default = Theme.Accent, Flag = "AccentColor", Callback = function(c) Win:SetAccent(c) end })
         th:AddColorPicker({ Name = "Accent gradient 2", Default = Theme.Accent2, Flag = "AccentColor2", Callback = function(c) Win:SetAccent2(c) end })
@@ -1822,11 +2354,25 @@ function Lib:CreateWindow(cfg)
             Lib.Flags.AccentColor:Set(Color3.fromHSV(math.random(), 0.75 + math.random() * 0.25, 1))
         end })
         th:AddSlider({ Name = "Window opacity", Min = 30, Max = 100, Default = 100, Suffix = "%", Flag = "UIOpacity", Callback = function(v) Win:SetOpacity(v / 100) end })
-        th:AddSlider({ Name = "Border glow", Min = 0, Max = 100, Default = 55, Suffix = "%", Flag = "UIGlow", Callback = function(v) Win:SetGlow(v / 100) end })
-        th:AddSlider({ Name = "Border thickness", Min = 0, Max = 6, Step = 0.5, Default = 2, Flag = "BorderThick", Callback = function(v) Win:SetBorderThickness(v) end })
-        th:AddSlider({ Name = "Border spin speed", Min = -300, Max = 300, Step = 10, Default = 60, Flag = "BorderSpin", Callback = function(v) Win:SetBorderSpin(v) end })
-        th:AddToggle({ Name = "Border pulse", Flag = "BorderPulse", Callback = function(v) Win:SetBorderPulse(v) end })
 
+        ---- Effects ----
+        local fx = st:AddModule({ Name = "Effects", Icon = Icons.Visuals, Info = "Background pattern, glow circles and shadows", Static = true })
+        fx:AddToggle({ Name = "Triangle pattern", Default = true, Flag = "PatOn", Callback = function(v) Win:SetPattern("On", v) end })
+        fx:AddOptions({ Name = "Pattern shapes", Options = { "Triangles", "Mixed", "Diamonds" }, Default = "Mixed", Flag = "PatStyle", Callback = function(v) Win:SetPattern("Style", v) end })
+        fx:AddSlider({ Name = "Pattern amount", Min = 0, Max = 60, Default = 24, Flag = "PatCount", Callback = function(v) Win:SetPattern("Count", v) end })
+        fx:AddSlider({ Name = "Pattern visibility", Min = 20, Max = 300, Step = 10, Default = 100, Suffix = "%", Flag = "PatOpacity", Callback = function(v) Win:SetPattern("Opacity", v / 100) end })
+        fx:AddSlider({ Name = "Pattern speed", Min = 0, Max = 300, Step = 10, Default = 100, Suffix = "%", Flag = "PatSpeed", Callback = function(v) Win:SetPattern("Speed", v / 100) end })
+        fx:AddButton({ Name = "Shuffle pattern", ButtonText = "SHUFFLE", Callback = function() Win:RegeneratePattern() end })
+        fx:AddToggle({ Name = "Glow circles", Default = true, Flag = "GlowOn", Callback = function(v) Win:SetPattern("Glow", v) end })
+        fx:AddSlider({ Name = "Glow intensity", Min = 0, Max = 200, Step = 5, Default = 100, Suffix = "%", Flag = "GlowAmt", Callback = function(v) Win:SetPattern("GlowAmt", v / 100) end })
+        fx:AddToggle({ Name = "Shadows", Default = true, Flag = "ShadowOn", Callback = function(v) Win:SetShadows(v) end })
+        fx:AddSlider({ Name = "Shadow strength", Min = 0, Max = 150, Step = 5, Default = 100, Suffix = "%", Flag = "ShadowAmt", Callback = function(v) Win:SetShadowAmount(v / 100) end })
+        fx:AddSlider({ Name = "Border glow", Min = 0, Max = 100, Default = 55, Suffix = "%", Flag = "UIGlow", Callback = function(v) Win:SetGlow(v / 100) end })
+        fx:AddSlider({ Name = "Border thickness", Min = 0, Max = 6, Step = 0.5, Default = 2, Flag = "BorderThick", Callback = function(v) Win:SetBorderThickness(v) end })
+        fx:AddSlider({ Name = "Border spin speed", Min = -300, Max = 300, Step = 10, Default = 60, Flag = "BorderSpin", Callback = function(v) Win:SetBorderSpin(v) end })
+        fx:AddToggle({ Name = "Border pulse", Flag = "BorderPulse", Callback = function(v) Win:SetBorderPulse(v) end })
+
+        ---- Window ----
         local wn = st:AddModule({ Name = "Window", Icon = Icons.Settings, Info = "Size, position and behavior", Static = true })
         wn:AddKeybind({ Name = "Toggle menu key", Default = Win.ToggleKey, Mode = "Press", Flag = "MenuKey", Hud = false,
             Callback = function() end, Changed = function(k) if k then Win:SetMenuKey(k) end end })
@@ -1836,6 +2382,7 @@ function Lib:CreateWindow(cfg)
         wn:AddToggle({ Name = "Lock window position", Flag = "UILock", Callback = function(v) Win:SetLockPos(v) end })
         wn:AddButton({ Name = "Reset window position", ButtonText = "CENTER", Callback = function() Win:ResetPos() end })
 
+        ---- Watermark ----
         local wmm = st:AddModule({ Name = "Watermark", Icon = Icons.Visuals, Info = "Write your own text with variables", Static = true })
         wmm:AddToggle({ Name = "Enabled", Flag = "WMEnabled", Callback = function(v) Win:SetWM("Enabled", v) end })
         wmm:AddTextbox({ Name = "Text", Wide = true, Live = true, Default = WM.Text, Placeholder = "Your text...", Flag = "WMText",
@@ -1859,6 +2406,7 @@ function Lib:CreateWindow(cfg)
         wmm:AddToggle({ Name = "24-hour clock", Default = true, Flag = "WMH24", Callback = function(v) Win:SetWM("H24", v) end })
         wmm:AddButton({ Name = "Reset position", ButtonText = "RESET", Callback = function() place(wm, WM.Pos, 18) end })
 
+        ---- Keybind list ----
         local kbm = st:AddModule({ Name = "Keybind list", Icon = Icons.Visuals, Info = "Shows only active binds", Static = true })
         kbm:AddToggle({ Name = "Enabled", Flag = "BindsHud", Callback = function(v) Win:SetHud("Enabled", v) end })
         kbm:AddTextbox({ Name = "Title", Default = HUD.Title, Placeholder = "KEYBINDS", Flag = "HudTitle", Callback = function(t) Win:SetHud("Title", t) end })
@@ -1870,12 +2418,14 @@ function Lib:CreateWindow(cfg)
         kbm:AddSlider({ Name = "Opacity", Min = 10, Max = 100, Default = 92, Suffix = "%", Flag = "HudOpacity", Callback = function(v) Win:SetHud("Opacity", v / 100) end })
         kbm:AddButton({ Name = "Reset position", ButtonText = "RESET", Callback = function() place(hud, HUD.Pos, 64) end })
 
+        ---- Notifications ----
         local nt = st:AddModule({ Name = "Notifications", Icon = Icons.Settings, Info = "Popup messages", Static = true })
         nt:AddToggle({ Name = "Notifications", Default = true, Flag = "Notifs", Callback = function(v) Win.NotifsOn = v end })
         nt:AddSlider({ Name = "Duration", Min = 1, Max = 10, Step = 0.5, Default = 3, Suffix = "s", Flag = "NotifTime", Callback = function(v) Win.NotifTime = v end })
         nt:AddOptions({ Name = "Position", Options = { "Top Right", "Top Left", "Bottom Right", "Bottom Left" }, Default = "Top Right", Flag = "NotifPos", Callback = function(v) Win:SetNotifPos(v) end })
-        nt:AddButton({ Name = "Test notification", ButtonText = "TEST", Callback = function() Win:Notify("FEMBOYSENSE", "This is a test notification", 3, "ok", true) end })
+        nt:AddButton({ Name = "Test notification", ButtonText = "TEST", Callback = function() Win:Notify("ZENITH", "This is a test notification", 3, "ok", true) end })
 
+        ---- Configs ----
         local cm = cf:AddModule({ Name = "Configs", Icon = Icons.Configs, Info = "Everything with a flag is saved", Static = true })
         local cfgName, cfgDD = "default", nil
         local function refresh() if cfgDD then cfgDD:Refresh(Win:ListConfigs()) end end
@@ -1898,6 +2448,12 @@ function Lib:CreateWindow(cfg)
         cm:AddTextbox({ Name = "Import from text", Placeholder = "paste exported config", Callback = function(t) importText = t end })
         cm:AddButton({ Name = "Apply imported config", ButtonText = "APPLY", Callback = function()
             if importText ~= "" and Win:ImportString(importText) then Win:Notify("Config", "Imported", 3, "ok") else Win:Notify("Config", "Invalid config text", 3, "err") end end })
+        cm:AddButton({ Name = "Reset ALL settings", ButtonText = "RESET", Callback = function()
+            Win:Confirm("Reset everything?", "All settings and keybinds go back to default values.", function()
+                Win:ResetAll()
+                Win:Notify("Settings", "Everything reset to defaults", 3, "warn")
+            end)
+        end })
         cm:AddToggle({ Name = "Auto save", Flag = "AutoSave", Callback = function(v) Win.AutoSave = v Win._lastAuto = nil end })
         cm:AddToggle({ Name = "Auto load", Flag = "AutoLoad", Callback = function(v)
             if Win.Loading then return end
@@ -1907,7 +2463,7 @@ function Lib:CreateWindow(cfg)
         layoutNav()
         for i, c in ipairs(Win.Categories) do
             c.Btn.Position = UDim2.fromOffset(-30, c.Y)
-            task.delay(0.15 + i * 0.03, function() tw(c.Btn, 0.5, { Position = UDim2.fromOffset(0, c.Y) }, BACK) end)
+            after(0.15 + i * 0.03, function() tw(c.Btn, 0.5, { Position = UDim2.fromOffset(0, c.Y) }, BACK) end)
         end
         task.delay(1.2, function()
             pcall(function()
@@ -1920,8 +2476,13 @@ function Lib:CreateWindow(cfg)
         end)
     end
 
+    ----------------------------------------------------------------
+    --  Поиск и бинды
+    ----------------------------------------------------------------
     searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        Win.Query = searchBox.Text:lower():gsub("^%s+", ""):gsub("%s+$", "")
+        local q = searchBox.Text:lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if q == Win.Query then return end
+        Win.Query = q
         if Win.Current then layout() end
     end)
 
@@ -1951,6 +2512,7 @@ function Lib:CreateWindow(cfg)
     end))
     keep(UIS.InputEnded:Connect(function(input) fireBinds(function(k) return keyMatch(k, input) end, false) end))
 
+    -- боковые кнопки мыши (M4/M5) через опрос, только если реально используются
     local xHeld = {}
     local function usesX()
         if Lib._listen then return true end
@@ -1978,8 +2540,7 @@ function Lib:CreateWindow(cfg)
 
     Win:SetNotifPos("Top Right")
     Win:SetGlow(0.55)
-    scale.Scale = fit() * 0.85
-    tw(scale, 0.8, { Scale = fit() }, BACK)
+    Win:Show() -- вступительная анимация: верх и низ раскрываются от центра
 
     return Win
 end
